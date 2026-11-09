@@ -61,7 +61,8 @@ def fingerprint(engine: Engine) -> str:
                 continue
             columns = [c for c in table.c if (table.name, c.name) != ("users", "password_hash")]
             digest.update(table.name.encode())
-            for row in connection.execute(select(*columns).order_by(table.c.id)):
+            # Sắp theo khóa chính của chính bảng (không phải bảng nào cũng có cột `id`).
+            for row in connection.execute(select(*columns).order_by(*table.primary_key.columns)):
                 digest.update(repr(tuple(row)).encode())
     return digest.hexdigest()
 
@@ -84,7 +85,8 @@ def test_row_counts_match_the_default_parameters(db_conn: Connection) -> None:
     # Các bảng do giai đoạn sau sinh thì để trống.
     assert (counts["risk_alerts"], counts["reports"], counts["ai_logs"]) == (0, 0, 0)
     assert (counts["regulation_documents"], counts["regulation_chunks"]) == (0, 0)
-    assert counts["settings"] == 14
+    # 14 khoá gốc + 3 khoá dự báo điểm thi tốt nghiệp (exam_forecast_*, D-123).
+    assert counts["settings"] == 17
 
 
 def test_every_student_subject_pair_has_all_scores_by_hand_table(db_conn: Connection) -> None:

@@ -88,6 +88,7 @@ LABELS_VI: dict[type[StrEnum], dict[StrEnum, str]] = {
         ReportScope.STUDENT: "Học sinh",
         ReportScope.CLASS: "Lớp",
         ReportScope.GRADE: "Khối",
+        ReportScope.SCHOOL: "Toàn trường",
     },
     ReportType: {
         ReportType.SUBJECT_COMMENT: "Nhận xét môn",
@@ -140,6 +141,10 @@ LABELS_VI: dict[type[StrEnum], dict[StrEnum, str]] = {
         AuditAction.EDIT_ATTENDANCE: "Điểm danh hoặc sửa điểm danh ngày",
         AuditAction.VIEW_LESSONS: "Xem điểm danh theo tiết",
         AuditAction.EDIT_LESSON: "Điểm danh một tiết",
+        AuditAction.VIEW_EXAM_REGISTRATION: "Xem đăng ký thi tốt nghiệp của lớp",
+        AuditAction.EDIT_EXAM_REGISTRATION: "Sửa môn tự chọn thi tốt nghiệp của học sinh",
+        AuditAction.LOCK_EXAM_REGISTRATION: "Chốt (khóa) đăng ký thi tốt nghiệp của lớp",
+        AuditAction.UNLOCK_EXAM_REGISTRATION: "Mở khóa đăng ký thi tốt nghiệp của lớp",
     },
     ConductChangeReason: {
         ConductChangeReason.REVIEW: "Xét lại",

@@ -105,6 +105,7 @@ class ReportScope(StrEnum):
     STUDENT = "student"
     CLASS = "class"
     GRADE = "grade"
+    SCHOOL = "school"  # báo cáo toàn trường, chỉ BGH (D-127)
 
 
 class ReportType(StrEnum):
@@ -163,6 +164,10 @@ class AuditAction(StrEnum):
     EDIT_ATTENDANCE = "edit_attendance"  # GVCN điểm danh / sửa điểm danh ngày (D-120)
     VIEW_LESSONS = "view_lessons"  # sổ điểm danh theo tiết (D-120)
     EDIT_LESSON = "edit_lesson"  # GVBM điểm danh một tiết (D-120)
+    VIEW_EXAM_REGISTRATION = "view_exam_registration"  # xem đăng ký thi tốt nghiệp của lớp (D-128)
+    EDIT_EXAM_REGISTRATION = "edit_exam_registration"  # GVCN sửa môn tự chọn của một em (D-128)
+    LOCK_EXAM_REGISTRATION = "lock_exam_registration"  # GVCN chốt (khóa) đăng ký của lớp (D-128)
+    UNLOCK_EXAM_REGISTRATION = "unlock_exam_registration"  # GVCN mở khóa đăng ký của lớp (D-128)
 
 
 class ScoreChangeReason(StrEnum):

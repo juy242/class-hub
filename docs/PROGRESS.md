@@ -720,3 +720,74 @@ Làm theo yêu cầu "BGH, GVCN, giáo viên nhập điểm xem lại được c
 | `pytest` toàn bộ back-end (1713 qua, 1 bỏ qua cần mô hình thật) | Đã chạy, qua |
 | `ruff check` + `ruff format`, `tsc -b`, `eslint`, `vite build` | Đã chạy, qua |
 | **Trình duyệt thật**: tải tệp mẫu, điền, nhập, xem sổ theo tiết | **Chưa kiểm** |
+
+## Admin xem danh sách học sinh của lớp (D-122)
+
+- Trang **Quản lý lớp** (Admin) có bảng **Danh sách học sinh**: STT, Mã HS, Họ và tên, Ngày sinh, kèm ô tìm theo mã/tên — để phân biệt học sinh. Không có thông tin phụ huynh, không có điểm hay dữ liệu học tập (nới D-039 đúng ba trường định danh).
+- Mới: `GET /admin/classes/{id}/students` (chỉ Admin, nhật ký `view_class_students`, **không cần migration**), `AdminStudentRow`/`ClassRosterOut`, `admin_service.get_class_roster`; front-end `components/admin/ClassRosterPanel.tsx`, `useClassRoster`. Panel nhập tệp tách thành "Nhập / cập nhật danh sách từ tệp".
+
+| Mục | Trạng thái |
+| --- | --- |
+| `ruff check` + `ruff format`, `tsc -b`, `eslint` (các tệp đổi) | Đã chạy, qua |
+| `pytest tests/classes/test_admin_school.py` (41 qua) | Đã chạy, qua |
+| API thật: Admin xem 12A7 (40 HS, mã/tên/ngày sinh, không có khoá phụ huynh); BGH/GVCN/GVBM 403; không token 401 | Đã chạy, đúng |
+| **Trình duyệt thật**: bảng danh sách, ô tìm kiếm, làm mới sau khi nhập/gỡ | **Chưa kiểm** |
+
+## Dự báo điểm thi tốt nghiệp khối 12 (D-123)
+
+- Công thức minh bạch (hồi quy ĐTB về trung bình + khoảng ±), hệ số ở `settings`; **không ML** (chưa có điểm thi thật). Chỉ **GVCN và GVBM** xem (BGH/Admin 403); GVBM chỉ thấy môn mình dạy. Hiện trên **Bảng điểm môn** (lớp 12) và **Hồ sơ học sinh** (lớp 12), kèm chú thích rõ "ước lượng, không phải điểm thi thật".
+- Mới: migration 22 (`c1a4e7b9d2f6`, 3 khoá `exam_forecast_*`), `app/analytics/exam_forecast.py`, `analytics/service.build_exam_forecast`, `analytics/repository.exam_subjects`, endpoint `GET /classes/{id}/exam-forecast`; front-end `components/forecast/ExamForecast.tsx`, `useExamForecast`. Test: `tests/analytics/test_exam_forecast.py`.
+
+| Mục | Trạng thái |
+| --- | --- |
+| `alembic upgrade head` (migration 22) trên DB dev | Đã chạy |
+| `ruff check` + `ruff format`, `tsc -b`, `eslint`, `vite build` | Đã chạy, qua |
+| `pytest tests/analytics tests/warning` (337 qua) | Đã chạy, qua |
+| API thật (12A1): GVCN mọi môn thi (ĐTB 8,6 cả năm → dự báo 8,3 [7,3–9,3]); GVBM chỉ môn mình; BGH 403; non-12 rỗng; 401 | Đã chạy, đúng |
+| **Trình duyệt thật**: panel dự báo ở bảng điểm và hồ sơ (lớp 12) | **Chưa kiểm** |
+| **Hiệu chỉnh hệ số với điểm thi thật** | **Chưa làm** (center/shrink/margin là phỏng đoán) |
+
+## Tóm tắt số liệu học sinh trên trang Nhận xét & báo cáo (D-124)
+
+- Dưới tên mỗi em trong danh sách nhận xét có **một dòng số liệu** để giáo viên có bối cảnh đánh giá: nhận xét môn (GVBM) → ĐTB môn + TX/GK/CK; phiếu liên lạc / học bạ (GVCN) → mức học tập, rèn luyện, số buổi nghỉ, số môn dưới mức đạt. Mọi số do Analytics tính, lấy một lần cho cả lớp; không đụng đường gửi LLM.
+- Mới: `ReportStudentSummaryOut` + trường `summary` trong `ReportItemOut`, `reports/service._student_summaries`; front-end `components/reports/StudentReports.tsx` (`SummaryLine`), type `ReportSummary`.
+
+| Mục | Trạng thái |
+| --- | --- |
+| `ruff check` + `ruff format`, `tsc -b`, `eslint`, `vite build` | Đã chạy, qua |
+| `pytest tests/reports` (255 qua, thêm 2) | Đã chạy, qua |
+| API thật: phiếu liên lạc 11A2 (em An nghỉ 38, Học tập Khá); nhận xét môn Ngữ văn (ĐTB 6,9, TX·GK·CK) | Đã chạy, đúng |
+| **Trình duyệt thật**: dòng tóm tắt dưới mỗi em | **Chưa kiểm** |
+
+## Trang Nhận xét & báo cáo cho Ban giám hiệu (D-125 → D-127)
+
+Bạn thấy trang này quá mỏng với vai trò BGH (chỉ có nút sinh báo cáo AI). Đề xuất bốn phần, bạn chọn làm **cả bốn**, chia ba giai đoạn.
+
+- **D-125 — Số liệu tổng hợp cạnh báo cáo:** trên trang báo cáo của BGH, hiện ngay bảng số liệu cho cả khối (mỗi lớp: học lực, nghỉ học, có môn quá thấp; ĐTB từng môn theo lớp) hoặc một lớp (học lực / hạnh kiểm, ĐTB môn). Thuần front-end, đọc `build_grade_overview` / `build_dashboard`. Mới: `components/reports/ReportFigures.tsx`.
+- **D-126 — Giám sát tiến độ nhận xét (chỉ BGH):** bảng mỗi lớp của khối đã viết / đã duyệt học bạ, phiếu liên lạc, nhận xét môn, kèm trạng thái báo cáo lớp; bấm tên lớp mở phạm vi lớp. Chỉ số đếm, không tên học sinh. Mới: `GET /reports/oversight`, `reports/repository.student_comment_progress`/`class_reports_in_grade`, `analytics/repository.student_counts`, `service.grade_oversight`; front-end `components/reports/ReportOversight.tsx`, `useOversight`.
+- **D-127 — Báo cáo toàn trường:** ô "Khối" thêm "Cả trường"; `ReportScope.SCHOOL`, báo cáo `report` không lớp/khối = toàn trường (chỉ BGH); `facts.school_facts` cộng dồn ba khối; PDF "BÁO CÁO TOÀN TRƯỜNG". Migration 23 (`b4d8f1c3a2e9`) đổi CHECK `ck_reports_scope` thêm `'school'` (không `ALTER TYPE` vì scope là VARCHAR+CHECK).
+
+| Mục | Trạng thái |
+| --- | --- |
+| `alembic upgrade head` (migration 23) + roundtrip down/up trên DB dev | Đã chạy |
+| `ruff check` + `ruff format`, `tsc -b`, `eslint`, `vite build` | Đã chạy, qua |
+| `pytest tests/reports tests/analytics` (reports 274, +12 test mới; analytics qua) | Đã chạy, qua |
+| API thật (BGH): `GET /reports/oversight` khối 12 (10 lớp, sĩ số 40, mẫu số đúng); liệt kê báo cáo toàn trường; `school_facts` 1200 HS = tổng ba khối khớp | Đã chạy, đúng |
+| **Trình duyệt thật**: bảng giám sát, số liệu tổng hợp, lựa chọn "Cả trường" | **Chưa kiểm** |
+
+## Quản lý đăng ký thi tốt nghiệp của học sinh khối 12 (D-128)
+
+Bạn hỏi làm sao biết HS khối 12 chọn môn thi gì; phát hiện dữ liệu `exam_registrations` đã có nhưng chưa có màn hình nhập/sửa, và thông báo trống của bảng dự báo gộp "chưa đăng ký" lẫn "chưa đủ điểm" gây hiểu nhầm. Làm màn hình quản lý.
+
+- **GVCN nhập/sửa** môn tự chọn cho lớp chủ nhiệm (ghi qua `authorize_write` không môn); **BGH xem được**, không sửa; **GVBM và Admin 403** (admin không xem dữ liệu học sinh — D-077/D-087). Chỉ **khối 12**.
+- **Toán + Ngữ văn bắt buộc** (tự giữ/thêm); mỗi em đúng **2 môn tự chọn**, phải là môn tính điểm lớp đang học, không phải môn thi (loại GDQP&AN) — quy tắc ở `exams/rules.py`, khớp seed.
+- **Khóa "đã chốt" theo lớp, GVCN tự khóa/mở** (thanh chắn chống thao tác nhầm): đã khóa thì sửa bị chặn (409) tới khi mở. `can_manage` (GVCN, kể cả khi khóa) tách khỏi `can_edit` (GVCN và chưa khóa) để nút mở khóa vẫn hiện. Đổi môn tự chọn làm mới dự báo điểm thi của em.
+- Mới: model `ExamRegistrationLock`; migration 24 (`e7c2f9a5b3d1`, bảng khóa + nới `audit_logs.action` 20→24 + 4 hành động nhật ký mới); module `app/exams/` (`rules`, `schemas`, `service`, `router`); front-end `pages/ExamRegistrationsPage.tsx`, `api/exams.ts`, `hooks/useExams.ts`, route `/classes/:classId/exam-registrations`, liên kết từ Dashboard lớp (lớp 12).
+
+| Mục | Trạng thái |
+| --- | --- |
+| `alembic upgrade head` (migration 24) + roundtrip down/up, models khớp migration | Đã chạy, qua |
+| `ruff check` + `ruff format` (toàn backend), `tsc --noEmit`, `eslint` | Đã chạy, qua |
+| `pytest tests/exams` (16 qua: 4 vai trò, validate 2 môn/môn hợp lệ, khóa chặn sửa rồi mở lại được, khối 11 → 404) | Đã chạy, qua |
+| `pytest` toàn bộ backend | Đang chạy |
+| **Trình duyệt thật**: tick 2 môn tự chọn, chốt/mở khóa, BGH chỉ xem | **Chưa kiểm** |

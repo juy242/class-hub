@@ -11,6 +11,7 @@ from app.classes.years import SchoolYearNotFound, school_year_not_found_handler
 from app.core.authorize import AuthorizationError, authorization_error_handler
 from app.core.config import get_settings
 from app.core.health import router as health_router
+from app.exams.router import router as exams_router
 from app.imports.conduct_router import router as conduct_router
 from app.imports.manual_router import router as manual_scores_router
 from app.imports.router import router as imports_router
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(manual_scores_router, prefix=API_PREFIX)
     app.include_router(conduct_router, prefix=API_PREFIX)
     app.include_router(attendance_router, prefix=API_PREFIX)
+    app.include_router(exams_router, prefix=API_PREFIX)
     app.include_router(warning_router, prefix=API_PREFIX)
     app.include_router(rag_router, prefix=API_PREFIX)
     app.include_router(assistant_router, prefix=API_PREFIX)

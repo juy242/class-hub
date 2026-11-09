@@ -225,6 +225,11 @@ export default function ClassDashboardPage() {
         actions={
           <>
             <PeriodSelect value={period} options={PERIODS} onChange={setPeriod} />
+            {dashboard.data?.class_info.grade_level === 12 && (
+              <Link to={`/classes/${classId}/exam-registrations`} className="link text-sm">
+                Đăng ký thi tốt nghiệp
+              </Link>
+            )}
             {isHomeroom && (
               <Link
                 to={`/classes/${classId}/import`}

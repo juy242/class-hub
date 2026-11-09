@@ -44,6 +44,7 @@ EXTRA_TABLES = {
     "attendance_changes",  # lịch sử điểm danh ngày nhập tay (D-120)
     "lessons",  # sổ điểm danh theo tiết (D-120)
     "lesson_absences",
+    "exam_registration_locks",  # khóa "đã chốt" đăng ký thi tốt nghiệp (D-128)
 }
 EXPECTED_SETTING_KEYS = {
     "coef_midterm",
@@ -60,6 +61,9 @@ EXPECTED_SETTING_KEYS = {
     "regular_assessment_count",
     "level_single_subject_adjustment",
     "rag_min_similarity",
+    "exam_forecast_center",
+    "exam_forecast_shrink",
+    "exam_forecast_margin",
 }
 VIEW_COLUMNS = [
     "class_student_id",

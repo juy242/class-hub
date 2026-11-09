@@ -124,6 +124,22 @@ class ExamRegistration(Base):
     subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id"))
 
 
+class ExamRegistrationLock(Base):
+    """Trạng thái "đã chốt" đăng ký thi tốt nghiệp của một lớp 12 (D-128).
+
+    Có dòng = đã khóa: GVCN không sửa đăng ký được cho tới khi tự mở (xóa dòng). Thanh chắn chống
+    thao tác nhầm, không phải kiểm soát an ninh. Khóa/mở do GVCN của lớp.
+    """
+
+    __tablename__ = "exam_registration_locks"
+
+    class_id: Mapped[int] = mapped_column(
+        ForeignKey("classes.id", ondelete="CASCADE"), primary_key=True
+    )
+    locked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    locked_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+
 class Lesson(Base):
     """Một tiết học đã được giáo viên bộ môn điểm danh (D-120): lớp, môn, ngày, tiết thứ mấy.
 

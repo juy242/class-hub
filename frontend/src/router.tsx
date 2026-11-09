@@ -47,6 +47,12 @@ export const router = createBrowserRouter([
             lazy: async () => ({ Component: (await import('./pages/ConductPage')).default }),
           },
           {
+            path: '/classes/:classId/exam-registrations',
+            lazy: async () => ({
+              Component: (await import('./pages/ExamRegistrationsPage')).default,
+            }),
+          },
+          {
             path: '/grades/:level',
             lazy: async () => ({ Component: (await import('./pages/GradeOverviewPage')).default }),
           },

@@ -98,7 +98,6 @@ def test_permission_matrix(
         (SUBJECT, 1, None, None),  # nhận xét môn thiếu môn
         (SUBJECT, None, 1, None),  # nhận xét môn thiếu lớp
         (RECORD, None, None, 11),  # học bạ không có phạm vi khối
-        (REPORT, None, None, None),  # báo cáo không nói lớp hay khối
     ],
 )
 def test_a_malformed_target_is_refused_even_for_the_principal(
@@ -126,4 +125,6 @@ def test_scope_follows_the_type_and_the_target() -> None:
     assert scope_for(RECORD, class_id=1) is ReportScope.STUDENT
     assert scope_for(SLIP, class_id=1) is ReportScope.STUDENT
     assert scope_for(REPORT, class_id=1) is ReportScope.CLASS
-    assert scope_for(REPORT, class_id=None) is ReportScope.GRADE
+    assert scope_for(REPORT, class_id=None, grade_level=11) is ReportScope.GRADE
+    # Báo cáo không lớp, không khối là báo cáo toàn trường (D-127).
+    assert scope_for(REPORT, class_id=None) is ReportScope.SCHOOL

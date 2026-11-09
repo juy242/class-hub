@@ -7,6 +7,7 @@ import type {
   Thresholds,
 } from '../api/analytics'
 import { ProfileAlertPanel } from '../components/alerts/ProfileAlertPanel'
+import { StudentExamForecast } from '../components/forecast/ExamForecast'
 import { AbsenceMeter } from '../components/AbsenceMeter'
 import { AbsenceChart } from '../components/charts/AbsenceChart'
 import { Icon } from '../components/Icon'
@@ -289,6 +290,9 @@ export default function StudentProfilePage() {
   // Nhận xét học sinh do người viết: GVCN (phiếu liên lạc) hoặc GVBM của môn (nhận xét môn); BGH
   // không viết nhận xét học sinh nên không có nút. Màn hình nhận xét kiểm lại quyền ở back-end.
   const taught = data?.scope === 'subjects' ? data.subjects[0] : undefined
+  // Dự báo điểm thi tốt nghiệp: chỉ giáo viên (GVCN/GVBM) và học sinh lớp 12 (D-123).
+  const showForecast =
+    assignments.data?.user.role === 'teacher' && data?.class_info.grade_level === 12
   const commentLink = isHomeroom
     ? `/reports?type=contact_slip&class=${classId}&semester=${period}&student=${studentId}`
     : taught
@@ -339,6 +343,7 @@ export default function StudentProfilePage() {
       <QueryState query={profile}>
         {(result) => <ProfileContent profile={result} canRecord={isHomeroom} />}
       </QueryState>
+      {showForecast && <StudentExamForecast classId={classId} studentId={studentId} />}
     </>
   )
 }

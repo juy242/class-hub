@@ -16,7 +16,8 @@ from typing import Any, cast
 from sqlalchemy.orm import Session
 
 from app.analytics import repository as repo
-from app.analytics.config import load_config
+from app.analytics import service as analytics
+from app.analytics.config import AnalyticsConfig, load_config
 from app.analytics.schemas import Period
 from app.assistant.llm import LLMProvider
 from app.assistant.scope import load_roster
@@ -32,14 +33,19 @@ from app.reports import generation, repository
 from app.reports.checks import check_text
 from app.reports.generation import Outcome, StudentItem
 from app.reports.models import Report, ReportJob
-from app.reports.permissions import STUDENT_TYPES, authorize_report, scope_for
+from app.reports.permissions import GRADE_LEVELS, STUDENT_TYPES, authorize_report, scope_for
 from app.reports.repository import ReportKey, find_report, store_outcome
 from app.reports.schemas import (
+    ClassOversightOut,
+    ClassReportStatusOut,
+    GradeOversightOut,
     JobOut,
     ReportIn,
     ReportItemOut,
     ReportListOut,
     ReportOut,
+    ReportProgressOut,
+    ReportStudentSummaryOut,
     ReportTarget,
     ReportUpdateIn,
     StudentRefOut,
@@ -148,7 +154,13 @@ def resolve(session: Session, user: User, target: ReportTarget, student_id: int 
         subject_id=target.subject_id,
         grade_level=target.grade_level,
     )
-    scope = scope_for(target.type, class_id=target.class_id)
+    scope = scope_for(target.type, class_id=target.class_id, grade_level=target.grade_level)
+    if scope is ReportScope.SCHOOL:
+        # Báo cáo toàn trường (D-127): không gắn lớp hay khối; target_id = 0 (một bản mỗi năm, kỳ).
+        year_id = resolve_year(session, target.school_year_id).id
+        return Resolved(
+            ReportKey(target.type, scope, 0, target.semester, None, None, year_id), None, None
+        )
     if scope is ReportScope.GRADE:
         grade = target.grade_level
         year_id = resolve_year(session, target.school_year_id).id
@@ -202,7 +214,7 @@ def load_authorized(session: Session, user: User, report_id: int) -> Report:
 def resolved_of(session: Session, report: Report) -> Resolved:
     """Dựng lại `Resolved` từ một bản đã có (đã qua `load_authorized`)."""
     info = None if report.class_id is None else repo.get_class(session, report.class_id)
-    if report.scope is not ReportScope.GRADE and info is None:
+    if report.scope not in (ReportScope.GRADE, ReportScope.SCHOOL) and info is None:
         raise NotFound("Không có lớp này.")
     student = None
     if report.scope is ReportScope.STUDENT and info is not None:
@@ -218,7 +230,11 @@ def facts_for(session: Session, resolved: Resolved) -> dict[str, Any]:
     config = load_config(session)
     period = cast(Period, key.semester)
     result: dict[str, Any] | None
-    if key.scope is ReportScope.GRADE:
+    if key.scope is ReportScope.SCHOOL:
+        result = report_facts.school_facts(
+            session, period, config, school_year_id=key.school_year_id
+        )
+    elif key.scope is ReportScope.GRADE:
         result = report_facts.grade_facts(
             session, key.target_id, period, config, school_year_id=key.school_year_id
         )
@@ -250,6 +266,15 @@ def facts_for(session: Session, resolved: Resolved) -> dict[str, Any]:
 
 def roster_for(session: Session, resolved: Resolved) -> list[RosterStudent]:
     """Học sinh mà bộ ẩn danh phải biết để bắt họ tên thật lọt vào dữ liệu hoặc văn bản."""
+    if resolved.key.scope is ReportScope.SCHOOL:
+        class_ids = [
+            c.id
+            for grade in GRADE_LEVELS
+            for c in repo.classes_in_grade(
+                session, grade, school_year_id=resolved.key.school_year_id
+            )
+        ]
+        return load_roster(session, class_ids)
     if resolved.key.scope is ReportScope.GRADE:
         classes = repo.classes_in_grade(
             session, resolved.key.target_id, school_year_id=resolved.key.school_year_id
@@ -260,6 +285,8 @@ def roster_for(session: Session, resolved: Resolved) -> list[RosterStudent]:
 
 
 def _scope_label(resolved: Resolved) -> str:
+    if resolved.key.scope is ReportScope.SCHOOL:
+        return "toàn trường"
     if resolved.key.scope is ReportScope.GRADE:
         return f"khối {resolved.key.target_id}"
     assert resolved.info is not None
@@ -374,11 +401,63 @@ def regenerate(
     return to_out(stored, resolved.student)
 
 
+def _f(value: Any) -> float | None:
+    return None if value is None else float(value)
+
+
+def _student_summaries(
+    session: Session, class_info: repo.ClassInfo, target: ReportTarget, config: AnalyticsConfig
+) -> dict[int, ReportStudentSummaryOut]:
+    """Tóm tắt số liệu của từng học sinh để giáo viên có bối cảnh nhận xét (D-124).
+
+    Tính một lần cho cả lớp qua Analytics (nguyên tắc 1). Nhận xét môn: ĐTB và điểm thành phần của
+    chính môn đó; phiếu liên lạc / học bạ: mức học tập, rèn luyện, số nghỉ, số môn dưới mức đạt.
+    """
+    if target.type is ReportType.SUBJECT_COMMENT:
+        if target.semester == "year":
+            return {}
+        subject = next(
+            (s for s in repo.class_subjects(session, class_info.id) if s.id == target.subject_id),
+            None,
+        )
+        if subject is None:
+            return {}
+        scores = analytics.build_subject_scores(
+            session, class_info, subject, int(target.semester), config
+        )
+        return {
+            row.student_id: ReportStudentSummaryOut(
+                subject_name=subject.name,
+                average=_f(row.average),
+                tx=[_f(v) for v in row.tx],
+                tx_missing=row.tx_missing,
+                midterm=_f(row.midterm),
+                final=_f(row.final),
+                comment_result=None if row.comment_result is None else str(row.comment_result),
+                complete=row.complete,
+            )
+            for row in scores.rows
+        }
+
+    results = analytics.build_class_results(session, class_info, target.semester, config)
+    return {
+        student.student.student_id: ReportStudentSummaryOut(
+            learning_level=None if student.learning.level is None else student.learning.level.value,
+            conduct_level=None if student.conduct.level is None else student.conduct.level.value,
+            absent_total=student.absence.absent_total,
+            below_pass_count=len(student.learning.below_pass_subjects),
+            incomplete_count=len(student.learning.incomplete_subjects),
+        )
+        for student in results.students
+    }
+
+
 def list_reports(session: Session, user: User, target: ReportTarget) -> ReportListOut:
     """Mỗi học sinh của lớp kèm bản (hoặc None), hoặc bản báo cáo lớp / khối."""
     if target.type in STUDENT_TYPES:
         resolved_class = resolve_class_for_list(session, user, target)
         students = repo.class_students(session, resolved_class.id)
+        summaries = _student_summaries(session, resolved_class, target, load_config(session))
         record_access(
             session,
             user,
@@ -402,6 +481,7 @@ def list_reports(session: Session, user: User, target: ReportTarget) -> ReportLi
             ReportItemOut(
                 student=student_ref(s),
                 report=None if s.student_id not in reports else to_out(reports[s.student_id], s),
+                summary=summaries.get(s.student_id),
             )
             for s in students
         ]
@@ -420,6 +500,70 @@ def list_reports(session: Session, user: User, target: ReportTarget) -> ReportLi
         items=[ReportItemOut(student=None, report=None if report is None else to_out(report))],
         job=None,
     )
+
+
+def grade_oversight(
+    session: Session,
+    user: User,
+    *,
+    grade_level: int,
+    semester: str,
+    school_year_id: int | None,
+) -> GradeOversightOut:
+    """Bảng giám sát tiến độ nhận xét của cả một khối cho BGH (D-126).
+
+    Chỉ BGH qua được (dùng chung cổng với báo cáo khối). Trả số bản đã viết / đã duyệt của từng lớp
+    cho học bạ, phiếu liên lạc, nhận xét môn, cùng trạng thái báo cáo tổng hợp của lớp — chỉ số đếm,
+    không đọc nội dung hay nêu tên học sinh nào.
+    """
+    authorize_report(
+        session, user, report_type=ReportType.REPORT, class_id=None, grade_level=grade_level
+    )
+    year_id = resolve_year(session, school_year_id).id
+    classes = repo.classes_in_grade(session, grade_level, school_year_id=year_id)
+    class_ids = [c.id for c in classes]
+    counts = repo.student_counts(session, class_ids)
+    progress = repository.student_comment_progress(
+        session, class_ids=class_ids, semester=semester, school_year_id=year_id
+    )
+    class_reports = repository.class_reports_in_grade(
+        session, class_ids=class_ids, semester=semester, school_year_id=year_id
+    )
+    record_access(
+        session,
+        user,
+        AuditAction.VIEW_CLASS_REPORTS,
+        class_id=None,
+        details={"view": "oversight", "grade_level": grade_level, "semester": semester},
+    )
+
+    def progress_of(class_id: int, report_type: ReportType, expected: int) -> ReportProgressOut:
+        count = progress.get((class_id, report_type))
+        written = 0 if count is None else count.written
+        approved = 0 if count is None else count.approved
+        return ReportProgressOut(written=written, approved=approved, expected=expected)
+
+    def report_status_of(class_id: int) -> ClassReportStatusOut:
+        report = class_reports.get(class_id)
+        if report is None:
+            return ClassReportStatusOut(status=None, status_label="Chưa có", report_id=None)
+        return ClassReportStatusOut(
+            status=report.status, status_label=label_vi(report.status), report_id=report.id
+        )
+
+    rows = [
+        ClassOversightOut(
+            class_id=c.id,
+            class_name=c.name,
+            student_count=counts.get(c.id, 0),
+            school_record=progress_of(c.id, ReportType.SCHOOL_RECORD, counts.get(c.id, 0)),
+            contact_slip=progress_of(c.id, ReportType.CONTACT_SLIP, counts.get(c.id, 0)),
+            subject_comment=progress_of(c.id, ReportType.SUBJECT_COMMENT, 0),
+            class_report=report_status_of(c.id),
+        )
+        for c in classes
+    ]
+    return GradeOversightOut(grade_level=grade_level, semester=cast(Period, semester), classes=rows)
 
 
 def resolve_class_for_list(session: Session, user: User, target: ReportTarget) -> repo.ClassInfo:

@@ -57,14 +57,75 @@ export interface ReportJob {
   finished_at: string | null
 }
 
+// Tóm tắt số liệu của một học sinh để giáo viên có bối cảnh khi nhận xét (D-124). Mọi số do
+// back-end tính qua Analytics; chỉ có với nhận xét học sinh (nhận xét môn / phiếu liên lạc / học bạ).
+export interface ReportSummary {
+  // Phiếu liên lạc / học bạ (GVCN):
+  learning_level: string | null // 'good' | 'fair' | 'pass' | 'fail' | null
+  conduct_level: string | null
+  absent_total: number | null
+  below_pass_count: number | null
+  incomplete_count: number | null
+  // Nhận xét môn (GVBM):
+  subject_name: string | null
+  average: number | null
+  tx: number[] | null
+  tx_missing: number | null
+  midterm: number | null
+  final: number | null
+  comment_result: string | null // 'pass' | 'fail'
+  complete: boolean | null
+}
+
 export interface ReportItem {
   student: StudentRef | null
   report: Report | null
+  summary: ReportSummary | null
 }
 
 export interface ReportList {
   items: ReportItem[]
   job: ReportJob | null
+}
+
+// Giám sát tiến độ nhận xét của cả một khối, chỉ BGH xem (D-126). Chỉ số đếm, không tên học sinh.
+export interface ReportProgress {
+  written: number
+  approved: number
+  expected: number // số cần có (sĩ số với học bạ / phiếu liên lạc); 0 = không có mẫu số cố định
+}
+
+export interface ClassReportStatus {
+  status: ReportStatus | null // null = chưa có
+  status_label: string
+  report_id: number | null
+}
+
+export interface ClassOversight {
+  class_id: number
+  class_name: string
+  student_count: number
+  school_record: ReportProgress
+  contact_slip: ReportProgress
+  subject_comment: ReportProgress
+  class_report: ClassReportStatus
+}
+
+export interface GradeOversight {
+  grade_level: number
+  semester: Period
+  classes: ClassOversight[]
+}
+
+export function fetchOversight(
+  gradeLevel: number,
+  semester: Period,
+  schoolYearId: number | null,
+  signal?: AbortSignal,
+): Promise<GradeOversight> {
+  const query = new URLSearchParams({ grade_level: String(gradeLevel), semester })
+  if (schoolYearId != null) query.set('school_year_id', String(schoolYearId))
+  return apiGet<GradeOversight>(`/reports/oversight?${query.toString()}`, signal)
 }
 
 // Bản nào, của lớp, môn, khối nào (hình dạng hợp lệ phụ thuộc loại, back-end kiểm lại).
@@ -86,7 +147,9 @@ function targetBody(target: ReportTarget): Record<string, unknown> {
     ...(target.classId !== undefined && { class_id: target.classId }),
     ...(target.subjectId !== undefined && { subject_id: target.subjectId }),
     ...(target.gradeLevel !== undefined && { grade_level: target.gradeLevel }),
-    ...(target.gradeLevel !== undefined &&
+    // Báo cáo khối (D-113) và báo cáo toàn trường (D-127) gắn với năm được chọn; bản theo lớp dùng
+    // năm của lớp nên không gửi. Cả hai loại trên đều không có class_id.
+    ...(target.classId === undefined &&
       target.schoolYearId != null && { school_year_id: target.schoolYearId }),
   }
 }

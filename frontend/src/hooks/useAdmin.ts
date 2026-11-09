@@ -8,6 +8,7 @@ import {
   deleteClass,
   fetchAdminUsers,
   fetchClassAssignments,
+  fetchClassRoster,
   fetchSchool,
   fetchSubjects,
   fetchTeachers,
@@ -85,6 +86,17 @@ export function useClassAssignments(classId: number) {
   })
 }
 
+// Danh sách định danh học sinh của lớp (mã, họ tên, ngày sinh) cho Admin phân biệt học sinh (D-122).
+export function useClassRoster(classId: number) {
+  const { token } = useAuth()
+  return useQuery({
+    queryKey: ['admin-roster', token, classId],
+    queryFn: ({ signal }) => fetchClassRoster(classId, signal),
+    enabled: token !== null && Number.isFinite(classId),
+    retry,
+  })
+}
+
 // Đổi tài khoản, lớp hay phân công làm các danh sách liên quan đổi (số phân công, GVCN, sĩ số), nên
 // làm mới mọi truy vấn quản trị sau khi xong. Dữ liệu ít, làm mới hết cho chắc.
 export function useRefreshAdmin() {
@@ -97,6 +109,7 @@ export function useRefreshAdmin() {
       client.invalidateQueries({ queryKey: ['admin-subjects'] }),
       client.invalidateQueries({ queryKey: ['school-years'] }),
       client.invalidateQueries({ queryKey: ['admin-assignments'] }),
+      client.invalidateQueries({ queryKey: ['admin-roster'] }),
       // Trang chủ và thanh bên của giáo viên đọc lớp chủ nhiệm / phân công từ đây.
       client.invalidateQueries({ queryKey: ['assignments'] }),
     ])

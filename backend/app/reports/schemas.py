@@ -39,8 +39,11 @@ class ReportTarget(BaseModel):
         elif self.type in STUDENT_TYPES:
             if self.class_id is None or self.subject_id is not None or self.grade_level is not None:
                 raise ValueError("Học bạ và phiếu liên lạc cần class_id, không có môn hay khối.")
-        elif (self.class_id is None) == (self.grade_level is None) or self.subject_id is not None:
-            raise ValueError("Báo cáo cần đúng một trong class_id hoặc grade_level, không có môn.")
+        elif self.subject_id is not None or (
+            self.class_id is not None and self.grade_level is not None
+        ):
+            # Báo cáo: lớp, hoặc khối, hoặc không gì cả (toàn trường, D-127); không bao giờ có môn.
+            raise ValueError("Báo cáo chỉ nhận một trong class_id hoặc grade_level, không có môn.")
         return self
 
 
@@ -105,16 +108,75 @@ class JobOut(BaseModel):
     finished_at: datetime | None
 
 
+class ReportStudentSummaryOut(BaseModel):
+    """Số liệu tóm tắt của một học sinh để giáo viên có bối cảnh khi nhận xét, đánh giá (D-124).
+
+    Mọi số do Analytics tính (nguyên tắc 1); đây là dữ liệu giáo viên đã được xem ở nơi khác (bảng
+    điểm, hồ sơ), hiện ngay cạnh ô nhận xét để khỏi phải mở trang khác.
+    """
+
+    # Phiếu liên lạc / học bạ (GVCN thấy toàn lớp):
+    learning_level: str | None = None  # 'good' | 'fair' | 'pass' | 'fail' | None
+    conduct_level: str | None = None
+    absent_total: int | None = None
+    below_pass_count: int | None = None  # số môn ĐTB dưới mức đạt
+    incomplete_count: int | None = None  # số môn chưa đủ dữ liệu
+    # Nhận xét môn (GVBM, chỉ môn mình dạy):
+    subject_name: str | None = None
+    average: float | None = None  # ĐTB môn của kỳ đang xem
+    tx: list[float] | None = None  # các đầu điểm thường xuyên
+    tx_missing: int | None = None
+    midterm: float | None = None
+    final: float | None = None
+    comment_result: str | None = None  # môn nhận xét: 'pass' | 'fail'
+    complete: bool | None = None
+
+
 class ReportItemOut(BaseModel):
     """Một dòng của danh sách: học sinh (nhận xét) hoặc chính lớp / khối (báo cáo)."""
 
     student: StudentRefOut | None
     report: ReportOut | None
+    summary: ReportStudentSummaryOut | None = None  # chỉ với nhận xét học sinh
 
 
 class ReportListOut(BaseModel):
     items: list[ReportItemOut]
     job: JobOut | None  # lần sinh cả lớp gần nhất đang chạy (hoặc vừa dừng) cho cùng phạm vi
+
+
+class ReportProgressOut(BaseModel):
+    """Tiến độ một loại nhận xét của một lớp: số đã viết và số đã duyệt (D-126)."""
+
+    written: int
+    approved: int
+    expected: int  # số bản cần có (sĩ số với học bạ / phiếu liên lạc); 0 = không có mẫu số cố định
+
+
+class ClassReportStatusOut(BaseModel):
+    """Trạng thái báo cáo tổng hợp của một lớp để BGH xem lớp nào đã có (D-126)."""
+
+    status: ReportStatus | None = None  # None = chưa có
+    status_label: str
+    report_id: int | None = None
+
+
+class ClassOversightOut(BaseModel):
+    class_id: int
+    class_name: str
+    student_count: int
+    school_record: ReportProgressOut  # học bạ (GVCN)
+    contact_slip: ReportProgressOut  # phiếu liên lạc (GVCN)
+    subject_comment: ReportProgressOut  # nhận xét môn (GVBM, nhiều môn nên không có mẫu số cố định)
+    class_report: ClassReportStatusOut  # báo cáo tổng hợp của lớp
+
+
+class GradeOversightOut(BaseModel):
+    """Bảng giám sát tiến độ nhận xét của cả một khối, chỉ BGH xem (D-126). Chỉ số đếm."""
+
+    grade_level: int
+    semester: Semester
+    classes: list[ClassOversightOut]
 
 
 class ReportUpdateIn(BaseModel):

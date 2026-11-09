@@ -21,6 +21,7 @@ from app.reports import export, jobs, service
 from app.reports.generation import FeedbackRejected
 from app.reports.permissions import STUDENT_TYPES
 from app.reports.schemas import (
+    GradeOversightOut,
     JobOut,
     RegenerateIn,
     ReportIn,
@@ -28,6 +29,7 @@ from app.reports.schemas import (
     ReportOut,
     ReportTarget,
     ReportUpdateIn,
+    Semester,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,6 +115,28 @@ def list_reports(
 ) -> ReportListOut:
     with _translate_errors():
         return service.list_reports(session, user, target)
+
+
+@router.get(
+    "/reports/oversight",
+    response_model=GradeOversightOut,
+    summary="BGH: tiến độ nhận xét của từng lớp trong một khối",
+)
+def report_oversight(
+    user: CurrentUser,
+    session: DbSession,
+    grade_level: Annotated[int, Query(ge=10, le=12)],
+    semester: Annotated[Semester, Query()] = "1",
+    school_year_id: Annotated[int | None, Query()] = None,
+) -> GradeOversightOut:
+    with _translate_errors():
+        return service.grade_oversight(
+            session,
+            user,
+            grade_level=grade_level,
+            semester=semester,
+            school_year_id=school_year_id,
+        )
 
 
 @router.put(

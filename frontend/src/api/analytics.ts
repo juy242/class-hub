@@ -267,6 +267,43 @@ export function fetchStudentProfile(
   )
 }
 
+// --- Dự báo điểm thi tốt nghiệp (khối 12, D-123; chỉ GVCN và GVBM) ---
+// Ước lượng từ ĐTB (hồi quy về trung bình), không phải điểm thi thật. GVBM chỉ thấy môn mình dạy.
+
+export interface ExamForecastMethod {
+  center: number
+  shrink: number
+  margin: number
+}
+
+export interface ExamSubjectForecast {
+  subject_id: number
+  subject_name: string
+  basis_average: number // ĐTB dùng để dự báo
+  basis: 'year' | 'semester1' | 'semester2'
+  predicted: number
+  low: number
+  high: number
+}
+
+export interface StudentExamForecast {
+  student_id: number
+  student_code: string
+  full_name: string
+  subjects: ExamSubjectForecast[]
+}
+
+export interface ClassExamForecast {
+  class_info: ClassRef
+  is_grade12: boolean
+  method: ExamForecastMethod
+  students: StudentExamForecast[]
+}
+
+export function fetchExamForecast(classId: number, signal?: AbortSignal) {
+  return apiGet<ClassExamForecast>(`/classes/${classId}/exam-forecast`, signal)
+}
+
 // --- Học sinh cần hỗ trợ trong một môn (GVBM, D-118) ---
 // Chỉ dựa trên điểm của chính môn đó; mọi lý do, mức và thống kê do back-end tính.
 

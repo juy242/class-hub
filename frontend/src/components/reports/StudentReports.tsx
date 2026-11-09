@@ -1,11 +1,88 @@
-import { useState } from 'react'
-import type { ReportJob, ReportList, ReportTarget } from '../../api/reports'
+import { useState, type ReactNode } from 'react'
+import type { ReportJob, ReportList, ReportSummary, ReportTarget } from '../../api/reports'
 import { useGenerateReport, useStartClassJob } from '../../hooks/useReports'
-import { formatInt } from '../../lib/format'
+import { formatInt, formatScore } from '../../lib/format'
+import { COMMENT_LABELS, levelLabel } from '../../lib/labels'
 import { ErrorAlert } from '../admin/shared'
 import { Icon } from '../Icon'
 import { JOB_ERRORS, STATE_BADGES, STATE_LABELS, stateOf } from './options'
 import { ReportEditor } from './ReportEditor'
+
+// Dòng số liệu tóm tắt dưới tên mỗi học sinh (D-124): để giáo viên có bối cảnh khi nhận xét, đánh
+// giá, không phải mở sang trang bảng điểm hay hồ sơ. Mọi số do back-end tính.
+function SummaryLine({ summary }: { summary: ReportSummary }) {
+  const parts: ReactNode[] = []
+
+  if (summary.subject_name !== null) {
+    // Nhận xét môn: ĐTB và điểm thành phần của chính môn đó.
+    if (summary.average !== null) {
+      parts.push(
+        <span key="dtb">
+          ĐTB <strong className="tabular-nums text-slate-700">{formatScore(summary.average)}</strong>
+        </span>,
+      )
+      if (summary.tx && summary.tx.length > 0) {
+        parts.push(<span key="tx">TX {summary.tx.map((v) => formatScore(v)).join('·')}</span>)
+      }
+      parts.push(<span key="gk">GK {formatScore(summary.midterm)}</span>)
+      parts.push(<span key="ck">CK {formatScore(summary.final)}</span>)
+    } else if (summary.comment_result !== null) {
+      parts.push(
+        <span key="nx" className={summary.comment_result === 'fail' ? 'text-red-700' : ''}>
+          {COMMENT_LABELS[summary.comment_result] ?? summary.comment_result}
+        </span>,
+      )
+    }
+    if (summary.complete === false) {
+      parts.push(
+        <span key="thieu" className="text-amber-700">
+          còn thiếu đầu điểm
+        </span>,
+      )
+    }
+    if (parts.length === 0) parts.push(<span key="chua">Chưa có điểm</span>)
+  } else {
+    // Phiếu liên lạc / học bạ: bức tranh chung của em trong kỳ.
+    parts.push(
+      <span key="ht" className={summary.learning_level === 'fail' ? 'text-red-700' : ''}>
+        Học tập: {levelLabel(summary.learning_level, '—')}
+      </span>,
+    )
+    parts.push(
+      <span key="rl" className={summary.conduct_level === 'fail' ? 'text-red-700' : ''}>
+        Rèn luyện: {levelLabel(summary.conduct_level, '—')}
+      </span>,
+    )
+    if (summary.absent_total !== null) {
+      parts.push(<span key="nghi">Nghỉ {formatInt(summary.absent_total)} buổi</span>)
+    }
+    if (summary.below_pass_count) {
+      parts.push(
+        <span key="duoi" className="text-amber-700">
+          {formatInt(summary.below_pass_count)} môn dưới mức đạt
+        </span>,
+      )
+    }
+    if (summary.incomplete_count) {
+      parts.push(
+        <span key="ic" className="text-slate-500">
+          {formatInt(summary.incomplete_count)} môn thiếu dữ liệu
+        </span>,
+      )
+    }
+  }
+
+  return (
+    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+      {parts.map((part, index) => (
+        <span key={index} className="flex items-center gap-2">
+          {index > 0 && <span className="text-slate-300">·</span>}
+          {part}
+        </span>
+      ))}
+    </p>
+  )
+}
 
 interface JobStatusProps {
   job: ReportJob
@@ -114,7 +191,7 @@ export function StudentReports({ target, list, initialStudentId }: StudentReport
       {generate.isError && <ErrorAlert error={generate.error} />}
 
       <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-        {items.map(({ student, report }) => {
+        {items.map(({ student, report, summary }) => {
           if (student === null) return null
           const state = stateOf(report)
           const open = openId === student.id && report !== null
@@ -124,6 +201,7 @@ export function StudentReports({ target, list, initialStudentId }: StudentReport
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{student.full_name}</p>
                   <p className="text-xs text-slate-500">Mã {student.student_code}</p>
+                  {summary && <SummaryLine summary={summary} />}
                 </div>
                 <span className={STATE_BADGES[state]}>{STATE_LABELS[state]}</span>
                 {report !== null ? (

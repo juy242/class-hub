@@ -109,6 +109,20 @@ export interface ClassAssignments {
   subjects: AssignmentRow[]
 }
 
+// Danh sách định danh học sinh của lớp cho Admin (D-122): chỉ mã, họ tên, ngày sinh.
+// Không có thông tin phụ huynh, không có điểm hay dữ liệu học tập.
+export interface AdminStudentRow {
+  student_code: string
+  full_name: string
+  date_of_birth: string | null
+}
+
+export interface ClassRoster {
+  class_id: number
+  class_name: string
+  students: AdminStudentRow[]
+}
+
 export function fetchAdminUsers(signal?: AbortSignal): Promise<AdminUser[]> {
   return apiGet<AdminUser[]>('/admin/users', signal)
 }
@@ -277,6 +291,10 @@ export function fetchClassAssignments(
   signal?: AbortSignal,
 ): Promise<ClassAssignments> {
   return apiGet<ClassAssignments>(`/admin/classes/${classId}/assignments`, signal)
+}
+
+export function fetchClassRoster(classId: number, signal?: AbortSignal): Promise<ClassRoster> {
+  return apiGet<ClassRoster>(`/admin/classes/${classId}/students`, signal)
 }
 
 export function setAssignment(

@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import ColumnElement, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -81,6 +81,62 @@ def reports_for_students(
             Report.semester == semester,
             subject,
             Report.target_id.in_(list(student_ids)),
+        )
+    )
+    return {report.target_id: report for report in rows}
+
+
+@dataclass(frozen=True)
+class ProgressCount:
+    """Số bản đã viết và đã duyệt của một lớp cho một loại nhận xét (giám sát BGH, D-126)."""
+
+    written: int
+    approved: int
+
+
+def student_comment_progress(
+    session: Session,
+    *,
+    class_ids: Iterable[int],
+    semester: str,
+    school_year_id: int,
+) -> dict[tuple[int, ReportType], ProgressCount]:
+    """Số nhận xét học sinh đã viết / đã duyệt theo (lớp, loại) cho cả một khối trong một năm học.
+
+    Một truy vấn gộp cho mọi lớp; dùng cho bảng giám sát của BGH, không đọc nội dung bản nào.
+    """
+    approved = func.count().filter(Report.status == ReportStatus.APPROVED)
+    rows = session.execute(
+        select(Report.class_id, Report.type, func.count(), approved)
+        .where(
+            Report.scope == ReportScope.STUDENT,
+            Report.class_id.in_(list(class_ids)),
+            Report.semester == semester,
+            Report.school_year_id == school_year_id,
+        )
+        .group_by(Report.class_id, Report.type)
+    ).all()
+    return {
+        (class_id, report_type): ProgressCount(written, approved_count)
+        for class_id, report_type, written, approved_count in rows
+    }
+
+
+def class_reports_in_grade(
+    session: Session,
+    *,
+    class_ids: Iterable[int],
+    semester: str,
+    school_year_id: int,
+) -> dict[int, Report]:
+    """Báo cáo tổng hợp (scope lớp) của từng lớp trong khối, theo id lớp (BGH xem lớp nào đã có)."""
+    rows = session.scalars(
+        select(Report).where(
+            Report.scope == ReportScope.CLASS,
+            Report.type == ReportType.REPORT,
+            Report.target_id.in_(list(class_ids)),
+            Report.semester == semester,
+            Report.school_year_id == school_year_id,
         )
     )
     return {report.target_id: report for report in rows}

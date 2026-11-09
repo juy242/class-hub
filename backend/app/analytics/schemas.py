@@ -369,3 +369,38 @@ class MySupportOut(BaseModel):
 
     school_year_id: int | None
     items: list[SubjectSupportOut]
+
+
+# --- Dự báo điểm thi tốt nghiệp (khối 12, D-123; chỉ GVCN và GVBM) -------------------------------
+
+
+class ExamForecastMethodOut(BaseModel):
+    """Hệ số của công thức dự báo, để giao diện chú thích rõ đây là ước lượng."""
+
+    center: Score
+    shrink: Score
+    margin: Score
+
+
+class ExamSubjectForecastOut(BaseModel):
+    subject_id: int
+    subject_name: str
+    basis_average: Score  # ĐTB dùng để dự báo
+    basis: Literal["year", "semester1", "semester2"]  # kỳ của ĐTB đã dùng
+    predicted: Score  # điểm thi dự báo
+    low: Score  # cận dưới khoảng tin cậy
+    high: Score  # cận trên khoảng tin cậy
+
+
+class StudentExamForecastOut(BaseModel):
+    student_id: int
+    student_code: str
+    full_name: str
+    subjects: list[ExamSubjectForecastOut]
+
+
+class ClassExamForecastOut(BaseModel):
+    class_info: ClassRefOut
+    is_grade12: bool  # false: lớp không phải khối 12 (danh sách rỗng)
+    method: ExamForecastMethodOut
+    students: list[StudentExamForecastOut]

@@ -84,6 +84,23 @@ class AdminClassOut(BaseModel):
     assigned_subject_count: int
 
 
+class AdminStudentRow(BaseModel):
+    """Một học sinh trong danh sách lớp cho Admin: chỉ đủ để phân biệt (mã, tên, ngày sinh).
+
+    Không có họ tên / số điện thoại phụ huynh, không có điểm hay dữ liệu học tập (D-122).
+    """
+
+    student_code: str
+    full_name: str
+    date_of_birth: date | None
+
+
+class ClassRosterOut(BaseModel):
+    class_id: int
+    class_name: str
+    students: list[AdminStudentRow]  # xếp theo mã học sinh
+
+
 class SchoolOut(BaseModel):
     # Năm học đang xem (được chọn, mặc định năm hiện hành); null khi chưa tạo năm học nào.
     school_year: SchoolYearOut | None

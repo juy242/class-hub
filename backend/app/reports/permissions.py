@@ -24,13 +24,20 @@ STUDENT_TYPES = frozenset(
 GRADE_LEVELS = (10, 11, 12)
 
 
-def scope_for(report_type: ReportType, *, class_id: int | None) -> ReportScope:
-    """Phạm vi của một loại: nhận xét là học sinh; báo cáo là lớp nếu có lớp, ngược lại là khối."""
+def scope_for(
+    report_type: ReportType, *, class_id: int | None, grade_level: int | None = None
+) -> ReportScope:
+    """Phạm vi của một loại: nhận xét là học sinh; báo cáo là lớp, khối hoặc toàn trường.
+
+    Báo cáo (`report`): có lớp → lớp; có khối → khối; không có cả hai → toàn trường (D-127).
+    """
     if report_type is ReportType.TEACHING_PLAN:
         return ReportScope.CLASS
     if report_type is not ReportType.REPORT:
         return ReportScope.STUDENT
-    return ReportScope.CLASS if class_id is not None else ReportScope.GRADE
+    if class_id is not None:
+        return ReportScope.CLASS
+    return ReportScope.GRADE if grade_level is not None else ReportScope.SCHOOL
 
 
 def authorize_report(
@@ -50,8 +57,10 @@ def authorize_report(
         return
 
     if report_type is ReportType.REPORT and class_id is None:
-        if grade_level is None:
-            raise AuthorizationError
+        if grade_level is None:  # báo cáo toàn trường (D-127): chỉ BGH, không gắn lớp hay khối
+            if user.role is not UserRole.PRINCIPAL:
+                raise AuthorizationError
+            return
         authorize(session, user, grade_level=grade_level)  # chỉ BGH qua được
         return
 

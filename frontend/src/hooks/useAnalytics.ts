@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import {
   fetchDashboard,
+  fetchExamForecast,
   fetchGradeOverview,
   fetchMySupport,
   fetchStudentProfile,
@@ -79,6 +80,18 @@ export function useStudentProfile(classId: number, studentId: number, period: Pe
     queryKey: ['student-profile', token, classId, studentId, period],
     queryFn: ({ signal }) => fetchStudentProfile(classId, studentId, period, signal),
     enabled: token !== null && Number.isInteger(classId) && Number.isInteger(studentId),
+    retry,
+  })
+}
+
+// Dự báo điểm thi tốt nghiệp của lớp 12 (D-123). `enabled` để chỉ giáo viên (GVCN/GVBM) gọi: BGH và
+// Admin bị back-end trả 403, nên đừng gọi cho họ. Back-end lọc theo môn GVBM được phân công.
+export function useExamForecast(classId: number, enabled = true) {
+  const { token } = useAuth()
+  return useQuery({
+    queryKey: ['exam-forecast', token, classId],
+    queryFn: ({ signal }) => fetchExamForecast(classId, signal),
+    enabled: token !== null && Number.isInteger(classId) && enabled,
     retry,
   })
 }

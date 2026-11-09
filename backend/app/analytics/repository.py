@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.analytics.attendance import AttendanceSummary, make_summary
 from app.analytics.views import v_subject_average
-from app.classes.academic import Assessment, Attendance, ConductResult
+from app.classes.academic import Assessment, Attendance, ConductResult, ExamRegistration
 from app.classes.models import (
     ClassStudent,
     SchoolClass,
@@ -138,6 +138,18 @@ def class_students(session: Session, class_id: int) -> list[StudentInfo]:
         .order_by(Student.student_code)
     ).all()
     return [StudentInfo(r[0], r[1], r[2], r[3]) for r in rows]
+
+
+def student_counts(session: Session, class_ids: list[int]) -> dict[int, int]:
+    """Sĩ số của nhiều lớp trong một truy vấn gộp (dùng cho bảng giám sát của BGH, D-126)."""
+    if not class_ids:
+        return {}
+    rows = session.execute(
+        select(ClassStudent.class_id, func.count())
+        .where(ClassStudent.class_id.in_(class_ids))
+        .group_by(ClassStudent.class_id)
+    ).all()
+    return {class_id: count for class_id, count in rows}
 
 
 def semester_rows(session: Session, class_id: int) -> list[SemesterRow]:
@@ -282,3 +294,17 @@ def raw_subject_scores(session: Session, class_id: int, subject_id: int) -> list
         .order_by(Assessment.class_student_id, Assessment.semester, Assessment.kind, Assessment.seq)
     ).all()
     return [RawScore(*r) for r in rows]
+
+
+def exam_subjects(session: Session, class_id: int) -> dict[int, list[int]]:
+    """Khối 12: id các môn đăng ký thi tốt nghiệp của từng học sinh (theo class_student_id)."""
+    rows = session.execute(
+        select(ExamRegistration.class_student_id, ExamRegistration.subject_id)
+        .join(ClassStudent, ClassStudent.id == ExamRegistration.class_student_id)
+        .where(ClassStudent.class_id == class_id)
+        .order_by(ExamRegistration.class_student_id, ExamRegistration.subject_id)
+    ).all()
+    result: dict[int, list[int]] = {}
+    for class_student_id, subject_id in rows:
+        result.setdefault(class_student_id, []).append(subject_id)
+    return result

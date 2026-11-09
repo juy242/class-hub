@@ -17,6 +17,7 @@ from app.analytics import support
 from app.analytics.attendance import AttendanceSummary, absences_by_month_in_range, make_summary
 from app.analytics.conduct import PeriodConduct, conduct_for_period, year_comment_result
 from app.analytics.config import AnalyticsConfig
+from app.analytics.exam_forecast import ForecastBand, forecast_band
 from app.analytics.learning import LearningResult, SubjectResult, learning_result
 from app.analytics.promotion import PromotionResult, promotion_status
 from app.analytics.schemas import (
@@ -728,3 +729,95 @@ def build_student_profile(
         thresholds=_thresholds(config),
         alert=None if alert_lookup is None else alert_lookup(student.class_student_id),
     )
+
+
+# --- Dự báo điểm thi tốt nghiệp (khối 12, D-123) -------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SubjectForecast:
+    subject_id: int
+    subject_name: str
+    basis_average: Decimal  # ĐTB dùng để dự báo (đã làm tròn)
+    basis: str  # "year" | "semester2" | "semester1": kỳ của ĐTB đã dùng
+    band: ForecastBand
+
+
+@dataclass(frozen=True)
+class StudentForecast:
+    student: repo.StudentInfo
+    subjects: tuple[SubjectForecast, ...]  # chỉ môn đăng ký thi đã đủ dữ liệu, theo tên môn
+
+
+@dataclass(frozen=True)
+class ClassExamForecast:
+    class_info: repo.ClassInfo
+    students: tuple[StudentForecast, ...]  # chỉ HS có ít nhất một môn dự báo được
+
+
+def build_exam_forecast(
+    session: Session,
+    class_info: repo.ClassInfo,
+    config: AnalyticsConfig,
+    *,
+    allowed_subject_ids: frozenset[int] | None,
+) -> ClassExamForecast:
+    """Dự báo điểm thi tốt nghiệp cho từng HS theo môn đăng ký thi (D-123).
+
+    `allowed_subject_ids=None` là mọi môn (GVCN); một tập là lọc theo môn GVBM được phân công.
+    ĐTB dùng để dự báo: cả năm nếu đủ hai học kỳ, nếu không thì học kỳ II, nếu không thì học kỳ I;
+    thiếu cả hai thì không dự báo môn đó. Môn nhận xét không có ĐTB nên tự bị bỏ.
+    """
+    registrations = repo.exam_subjects(session, class_info.id)
+    if not registrations:
+        return ClassExamForecast(class_info, ())
+
+    hk1 = build_class_results(session, class_info, "1", config)
+    hk2 = build_class_results(session, class_info, "2", config)
+    subject_names = {subject.id: subject.name for subject in hk1.subjects}
+    avg1 = {
+        (student.student.class_student_id, s.subject_id): s.average
+        for student in hk1.students
+        for s in student.subjects
+    }
+    avg2 = {
+        (student.student.class_student_id, s.subject_id): s.average
+        for student in hk2.students
+        for s in student.subjects
+    }
+    students_by_cs = {student.student.class_student_id: student.student for student in hk1.students}
+
+    out: list[StudentForecast] = []
+    for class_student_id, subject_ids in registrations.items():
+        student = students_by_cs.get(class_student_id)
+        if student is None:
+            continue
+        forecasts: list[SubjectForecast] = []
+        for subject_id in subject_ids:
+            if allowed_subject_ids is not None and subject_id not in allowed_subject_ids:
+                continue
+            v1 = avg1.get((class_student_id, subject_id))
+            v2 = avg2.get((class_student_id, subject_id))
+            if v1 is not None and v2 is not None:
+                basis_average, basis = year_average(v1, v2, config), "year"
+            elif v2 is not None:
+                basis_average, basis = v2, "semester2"
+            elif v1 is not None:
+                basis_average, basis = v1, "semester1"
+            else:
+                continue
+            assert basis_average is not None
+            forecasts.append(
+                SubjectForecast(
+                    subject_id=subject_id,
+                    subject_name=subject_names.get(subject_id, f"Môn {subject_id}"),
+                    basis_average=basis_average,
+                    basis=basis,
+                    band=forecast_band(basis_average, config),
+                )
+            )
+        if forecasts:
+            forecasts.sort(key=lambda f: f.subject_name)
+            out.append(StudentForecast(student, tuple(forecasts)))
+    out.sort(key=lambda s: s.student.student_code)
+    return ClassExamForecast(class_info, tuple(out))

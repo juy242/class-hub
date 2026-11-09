@@ -1,7 +1,8 @@
 """API quản trị năm học, lớp, GVCN, phân công giảng dạy (D-098, D-099): chỉ Admin.
 
-Mọi endpoint qua `AdminUser` (401 rồi 403 trước khi đọc yêu cầu). Admin không xem dữ liệu học sinh
-(D-039): phản hồi chỉ có số đếm, và gỡ học sinh theo mã do Admin gõ vào.
+Mọi endpoint qua `AdminUser` (401 rồi 403 trước khi đọc yêu cầu). Admin không xem dữ liệu học
+tập của học sinh (D-039); chỉ xem được danh sách định danh của lớp (mã, họ tên, ngày sinh) để
+phân biệt học sinh (D-122), và gỡ học sinh theo mã do Admin gõ vào.
 
 DESIGN mục 7 ghi `POST /admin/assignments`; ở đây phân công đi theo từng lớp (`PUT
 /admin/classes/{id}/assignments/{subject_id}`) vì mỗi lần là một cặp lớp-môn (D-099).
@@ -19,6 +20,7 @@ from app.classes.admin_schemas import (
     AssignmentIn,
     ClassAssignmentsOut,
     ClassCreateIn,
+    ClassRosterOut,
     ClassUpdateIn,
     CopiedOut,
     CopyAssignmentsIn,
@@ -149,6 +151,15 @@ def update_class(
 def delete_class(class_id: int, admin: AdminUser, session: DbSession) -> DeletedOut:
     _run(lambda: service.delete_class(session, admin, class_id))
     return DeletedOut(detail="Đã xoá lớp.")
+
+
+@router.get(
+    "/classes/{class_id}/students",
+    response_model=ClassRosterOut,
+    summary="Danh sách học sinh của lớp: mã, họ tên, ngày sinh (chỉ Admin)",
+)
+def get_class_roster(class_id: int, admin: AdminUser, session: DbSession) -> ClassRosterOut:
+    return _run(lambda: service.get_class_roster(session, admin, class_id))
 
 
 @router.get(

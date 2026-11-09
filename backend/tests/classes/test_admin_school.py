@@ -89,6 +89,7 @@ def endpoints(class_id: int, other_class: int, subject_id: int, teacher_id: int)
         ("POST", f"{base}/classes", {"grade_level": 11, "name": "11A8"}),
         ("PATCH", f"{base}/classes/{class_id}", {"name": "11A2"}),
         ("DELETE", f"{base}/classes/{class_id}", None),
+        ("GET", f"{base}/classes/{class_id}/students", None),
         ("GET", f"{base}/classes/{class_id}/assignments", None),
         ("PUT", f"{base}/classes/{class_id}/assignments/{subject_id}", {"teacher_id": teacher_id}),
         ("DELETE", f"{base}/classes/{class_id}/assignments/{subject_id}", None),
@@ -135,15 +136,37 @@ def test_unauthenticated_gets_401_on_every_endpoint(
         assert api_client.request(method, url, json=body).status_code == 401, (method, url)
 
 
-def test_admin_still_cannot_read_student_data(
+def test_admin_still_cannot_read_student_academic_data(
     api_client: TestClient, auth_headers: Headers, db_session: Session
 ) -> None:
-    # D-039: các màn hình quản trị không mở quyền xem học sinh cho Admin.
+    # D-039 vẫn giữ cho dữ liệu học tập: các endpoint của giáo viên không mở cho Admin.
     class_id = class_id_by_name(db_session, "11A2")
     headers = auth_headers(ADMIN)
 
     assert api_client.get(f"{API}/classes/{class_id}/students", headers=headers).status_code == 403
     assert api_client.get(f"{API}/classes/{class_id}/dashboard", headers=headers).status_code == 403
+
+
+def test_admin_can_read_class_roster_identity_only(
+    api_client: TestClient, auth_headers: Headers, db_session: Session
+) -> None:
+    # D-122 nới D-039: Admin xem được danh sách định danh (mã, họ tên, ngày sinh) để phân biệt học
+    # sinh, nhưng không có thông tin phụ huynh hay dữ liệu học tập; có ghi nhật ký.
+    class_id = class_id_by_name(db_session, "11A2")
+    expected = db_session.scalar(
+        select(func.count()).select_from(ClassStudent).where(ClassStudent.class_id == class_id)
+    )
+    response = api_client.get(
+        f"{API}/admin/classes/{class_id}/students", headers=auth_headers(ADMIN)
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["class_name"] == "11A2"
+    assert len(body["students"]) == expected
+    row = body["students"][0]
+    assert set(row) == {"student_code", "full_name", "date_of_birth"}
+    assert not any("guardian" in key or "phone" in key for key in row)
+    assert audit(db_session, AuditAction.VIEW_CLASS_STUDENTS)
 
 
 # --- Năm học và danh sách lớp ------------------------------------------------------------------

@@ -12,10 +12,15 @@ from app.analytics import repository as repo
 from app.analytics import service
 from app.analytics.config import load_config
 from app.analytics.schemas import (
+    ClassExamForecastOut,
+    ClassRefOut,
     DashboardOut,
+    ExamForecastMethodOut,
+    ExamSubjectForecastOut,
     GradeOverviewOut,
     MySupportOut,
     Period,
+    StudentExamForecastOut,
     StudentProfileFullOut,
     StudentProfileSubjectsOut,
     SubjectScoresOut,
@@ -24,7 +29,7 @@ from app.analytics.schemas import (
 from app.auth.audit import record_access
 from app.auth.deps import CurrentUser
 from app.classes.years import SchoolYearQuery, resolve_year, resolve_year_id
-from app.core.authorize import authorize
+from app.core.authorize import AuthorizationError, authorize
 from app.core.db import DbSession
 from app.core.enums import AuditAction, UserRole
 from app.warning import repository as warning_repo
@@ -193,6 +198,68 @@ def my_support(
         )
     session.commit()  # nhật ký của mọi lớp–môn ghi cùng lúc, trước khi trả dữ liệu
     return MySupportOut(school_year_id=year_id, items=items)
+
+
+@router.get(
+    "/classes/{class_id}/exam-forecast",
+    response_model=ClassExamForecastOut,
+    summary="Dự báo điểm thi tốt nghiệp lớp 12 (chỉ GVCN và GVBM; GVBM chỉ môn mình dạy)",
+)
+def exam_forecast(class_id: int, user: CurrentUser, session: DbSession) -> ClassExamForecastOut:
+    access = authorize(session, user, class_id=class_id)
+    # Dự báo điểm thi chỉ cho giáo viên trực tiếp (GVCN/GVBM); BGH và Admin không xem (D-123).
+    if access.role is not UserRole.TEACHER:
+        raise AuthorizationError
+    class_info = repo.get_class(session, class_id)
+    if class_info is None:
+        raise _not_found("Không có lớp này.")
+    config = load_config(session)
+    method = ExamForecastMethodOut(
+        center=config.exam_forecast_center,
+        shrink=config.exam_forecast_shrink,
+        margin=config.exam_forecast_margin,
+    )
+    class_ref = ClassRefOut(
+        id=class_info.id, name=class_info.name, grade_level=class_info.grade_level
+    )
+    if class_info.grade_level != 12:
+        return ClassExamForecastOut(
+            class_info=class_ref, is_grade12=False, method=method, students=[]
+        )
+
+    forecast = service.build_exam_forecast(
+        session, class_info, config, allowed_subject_ids=access.subject_ids
+    )
+    students = [
+        StudentExamForecastOut(
+            student_id=student.student.student_id,
+            student_code=student.student.student_code,
+            full_name=student.student.full_name,
+            subjects=[
+                ExamSubjectForecastOut(
+                    subject_id=f.subject_id,
+                    subject_name=f.subject_name,
+                    basis_average=f.basis_average,
+                    basis=f.basis,
+                    predicted=f.band.point,
+                    low=f.band.low,
+                    high=f.band.high,
+                )
+                for f in student.subjects
+            ],
+        )
+        for student in forecast.students
+    ]
+    record_access(
+        session,
+        user,
+        AuditAction.VIEW_SUBJECT_SCORES,
+        class_id=class_id,
+        details={"view": "exam_forecast", "student_count": len(students)},
+    )
+    return ClassExamForecastOut(
+        class_info=class_ref, is_grade12=True, method=method, students=students
+    )
 
 
 @router.get(

@@ -327,7 +327,6 @@ def test_unknown_class_or_student_is_a_404_only_after_the_permission_check(
         {"type": "contact_slip", "semester": "1"},  # thiếu lớp
         {"type": "contact_slip", "semester": "1", "class_id": 1, "grade_level": 11},
         {"type": "report", "semester": "1", "class_id": 1, "grade_level": 11},
-        {"type": "report", "semester": "1"},
         {"type": "report", "semester": "1", "class_id": 1, "student_id": 1},
         {"type": "report", "semester": "1", "grade_level": 9},
         {"type": "contact_slip", "semester": "1", "class_id": 1, "feedback": "góp ý"},
@@ -883,3 +882,165 @@ def test_teaching_plan_is_only_for_one_semester(
     }
     response = api_client.post(REPORTS, json=body, headers=auth_headers(GVBM_TOAN_11))
     assert response.status_code == 422
+
+
+# --- Tóm tắt số liệu từng học sinh trong danh sách (D-124) --------------------------------------
+
+
+def test_list_contact_slip_has_a_per_student_summary(
+    api_client: TestClient,
+    auth_headers: Headers,
+    class_id_of: Callable[[str], int],
+    an_id: int,
+) -> None:
+    response = api_client.get(
+        REPORTS,
+        params={"type": "contact_slip", "class_id": class_id_of("11A2"), "semester": "1"},
+        headers=auth_headers(GVCN_11A2),
+    )
+    assert response.status_code == 200
+    an = next(it for it in response.json()["items"] if it["student"]["id"] == an_id)
+    summary = an["summary"]
+    assert summary is not None
+    assert summary["absent_total"] == 38  # em An nghỉ 38 buổi
+    assert summary["learning_level"] in {"good", "fair", "pass", "fail"}
+    assert summary["subject_name"] is None  # phiếu liên lạc không gắn một môn cụ thể
+
+
+def test_list_subject_comment_has_subject_scores_summary(
+    api_client: TestClient,
+    auth_headers: Headers,
+    class_id_of: Callable[[str], int],
+    subject_id_of: Callable[[str], int],
+    an_id: int,
+) -> None:
+    response = api_client.get(
+        REPORTS,
+        params={
+            "type": "subject_comment",
+            "class_id": class_id_of("11A2"),
+            "subject_id": subject_id_of("Ngữ văn"),
+            "semester": "1",
+        },
+        headers=auth_headers(GVBM_VAN_11),
+    )
+    assert response.status_code == 200
+    an = next(it for it in response.json()["items"] if it["student"]["id"] == an_id)
+    summary = an["summary"]
+    assert summary["subject_name"] == "Ngữ văn"
+    assert summary["average"] is not None
+    assert isinstance(summary["tx"], list)
+    assert summary["learning_level"] is None  # nhận xét môn không có mức học tập cả lớp
+
+
+# --- Giám sát tiến độ nhận xét của BGH (D-126) ------------------------------------------------
+
+OVERSIGHT = f"{REPORTS}/oversight"
+
+
+def test_oversight_lists_every_class_of_the_grade_for_the_principal(
+    api_client: TestClient,
+    auth_headers: Headers,
+    db_session: Session,
+) -> None:
+    response = api_client.get(
+        OVERSIGHT, params={"grade_level": 11, "semester": "1"}, headers=auth_headers(PRINCIPAL)
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["grade_level"] == 11
+    a2 = next(c for c in body["classes"] if c["class_name"] == "11A2")
+    assert a2["student_count"] > 0
+    # Học bạ / phiếu liên lạc có mẫu số = sĩ số; nhận xét môn nhiều môn nên không có mẫu số.
+    assert a2["school_record"]["expected"] == a2["student_count"]
+    assert a2["contact_slip"]["expected"] == a2["student_count"]
+    assert a2["subject_comment"]["expected"] == 0
+    assert a2["class_report"]["report_id"] is None  # chưa sinh báo cáo lớp nào
+    assert a2["class_report"]["status_label"] == "Chưa có"
+    logged = db_session.scalars(
+        select(AuditLog).where(AuditLog.action == AuditAction.VIEW_CLASS_REPORTS)
+    ).all()
+    assert any((row.details or {}).get("view") == "oversight" for row in logged)
+
+
+@pytest.mark.parametrize("email", [GVCN_11A2, GVBM_VAN_11, ADMIN])
+def test_oversight_is_forbidden_for_everyone_but_the_principal(
+    api_client: TestClient, auth_headers: Headers, email: str
+) -> None:
+    response = api_client.get(
+        OVERSIGHT, params={"grade_level": 11, "semester": "1"}, headers=auth_headers(email)
+    )
+    assert response.status_code == 403
+
+
+def test_oversight_counts_a_written_and_approved_contact_slip(
+    api_client: TestClient,
+    auth_headers: Headers,
+    an_id: int,
+    make_slip: Callable[..., dict[str, Any]],
+) -> None:
+    draft = make_slip()
+    approved = api_client.put(
+        f"{REPORTS}/{draft['id']}", json={"approve": True}, headers=auth_headers(GVCN_11A2)
+    )
+    assert approved.status_code == 200, approved.text
+    response = api_client.get(
+        OVERSIGHT, params={"grade_level": 11, "semester": "1"}, headers=auth_headers(PRINCIPAL)
+    )
+    a2 = next(c for c in response.json()["classes"] if c["class_name"] == "11A2")
+    assert a2["contact_slip"]["written"] >= 1
+    assert a2["contact_slip"]["approved"] >= 1
+
+
+# --- Báo cáo toàn trường của BGH (D-127) ------------------------------------------------------
+
+
+def test_principal_can_generate_a_whole_school_report(
+    api_client: TestClient, auth_headers: Headers, use_llm: UseLlm
+) -> None:
+    use_llm(FakeWriter())
+    response = api_client.post(
+        REPORTS, json={"type": "report", "semester": "1"}, headers=auth_headers(PRINCIPAL)
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["scope"] == "school"
+    assert body["status"] == "draft"
+    assert body["class_id"] is None
+    assert body["target_id"] == 0
+
+
+@pytest.mark.parametrize("email", [GVCN_11A2, GVBM_VAN_11, ADMIN])
+def test_whole_school_report_is_forbidden_for_non_principals(
+    api_client: TestClient, auth_headers: Headers, use_llm: UseLlm, email: str
+) -> None:
+    use_llm(FakeWriter())
+    response = api_client.post(
+        REPORTS, json={"type": "report", "semester": "1"}, headers=auth_headers(email)
+    )
+    assert response.status_code == 403
+
+
+def test_whole_school_report_lists_approves_and_exports_pdf(
+    api_client: TestClient, auth_headers: Headers, use_llm: UseLlm
+) -> None:
+    use_llm(FakeWriter())
+    created = api_client.post(
+        REPORTS, json={"type": "report", "semester": "year"}, headers=auth_headers(PRINCIPAL)
+    )
+    assert created.status_code == 201, created.text
+    report_id = created.json()["id"]
+
+    listing = api_client.get(
+        REPORTS, params={"type": "report", "semester": "year"}, headers=auth_headers(PRINCIPAL)
+    )
+    assert listing.status_code == 200
+    assert listing.json()["items"][0]["report"]["id"] == report_id
+
+    approved = api_client.put(
+        f"{REPORTS}/{report_id}", json={"approve": True}, headers=auth_headers(PRINCIPAL)
+    )
+    assert approved.status_code == 200, approved.text
+    pdf = api_client.get(f"{REPORTS}/{report_id}/export", headers=auth_headers(PRINCIPAL))
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"

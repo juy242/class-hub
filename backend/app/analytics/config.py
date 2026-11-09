@@ -35,6 +35,12 @@ class AnalyticsConfig:
     absent_warning_high: int  # cảnh báo mức cao (40)
     regular_assessment_count: tuple[Mapping[str, Any], ...]  # luật số đầu điểm thường xuyên
     level_single_subject_adjustment: bool  # Điều 9: nâng mức khi chỉ do duy nhất 1 môn
+    # Dự báo điểm thi tốt nghiệp (khối 12), hồi quy ĐTB về trung bình (D-123): điểm dự báo =
+    # center + shrink × (ĐTB − center), kèm khoảng ± margin. KHÔNG phải công thức Thông tư 22; là
+    # ước lượng có thể hiệu chỉnh khi có dữ liệu điểm thi thật.
+    exam_forecast_center: Decimal = Decimal("6.5")
+    exam_forecast_shrink: Decimal = Decimal("0.85")
+    exam_forecast_margin: Decimal = Decimal("1.0")
 
     def required_regular(self, periods_per_year: int) -> int:
         """Số đầu điểm thường xuyên mỗi học kỳ của một môn theo số tiết/năm."""
@@ -58,6 +64,13 @@ INT_KEYS = (
 )
 OTHER_KEYS = ("regular_assessment_count", "level_single_subject_adjustment")
 REQUIRED_KEYS = (*DECIMAL_KEYS, *INT_KEYS, *OTHER_KEYS)
+# Hệ số dự báo điểm thi (D-123): có mặc định nên cấu hình cũ chưa có khoá vẫn chạy; migration seed
+# giá trị thật để Admin hiệu chỉnh. Không nằm trong REQUIRED_KEYS.
+EXAM_FORECAST_DEFAULTS: Mapping[str, str] = {
+    "exam_forecast_center": "6.5",
+    "exam_forecast_shrink": "0.85",
+    "exam_forecast_margin": "1.0",
+}
 
 
 def config_from_values(values: Mapping[str, Any]) -> AnalyticsConfig:
@@ -71,6 +84,10 @@ def config_from_values(values: Mapping[str, Any]) -> AnalyticsConfig:
     return AnalyticsConfig(
         **{key: Decimal(str(values[key])) for key in DECIMAL_KEYS},
         **{key: int(values[key]) for key in INT_KEYS},
+        **{
+            key: Decimal(str(values.get(key, default)))
+            for key, default in EXAM_FORECAST_DEFAULTS.items()
+        },
         regular_assessment_count=tuple(rules),
         level_single_subject_adjustment=bool(values["level_single_subject_adjustment"]),
     )

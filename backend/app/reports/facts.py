@@ -205,6 +205,91 @@ def class_facts(
     return facts
 
 
+SCHOOL_GRADES = (10, 11, 12)
+
+
+def _sum_counts(dicts: list[dict[str, int]]) -> dict[str, int]:
+    """Cộng dồn các dict đếm theo khoá (gom số đã tính, không phải công thức Thông tư)."""
+    total: dict[str, int] = {}
+    for one in dicts:
+        for key, value in one.items():
+            total[key] = total.get(key, 0) + value
+    return total
+
+
+def _grade_summary(
+    session: Session,
+    grade_level: int,
+    period: Period,
+    config: AnalyticsConfig,
+    *,
+    school_year_id: int,
+) -> dict[str, Any] | None:
+    """Tổng hợp một khối (cộng dồn từng lớp). Giữ khoá gốc để còn cộng tiếp lên toàn trường."""
+    classes = repo.classes_in_grade(session, grade_level, school_year_id=school_year_id)
+    if not classes:
+        return None
+    data = analytics.build_grade_overview(session, grade_level, classes, period, config).model_dump(
+        mode="json"
+    )
+    rows = data["classes"]
+    return {
+        "grade": grade_level,
+        "class_count": len(rows),
+        "student_count": sum(c["student_count"] for c in rows),
+        "learning_levels": _sum_counts([c["learning_levels"] for c in rows]),
+        "conduct_levels": _sum_counts([c["conduct_levels"] for c in rows]),
+        "students_absent_from_warning_level": sum(c["absent_notice_students"] for c in rows),
+        "students_absent_over_maximum": sum(c["absent_over_limit_students"] for c in rows),
+        "students_with_a_very_low_subject": sum(c["below_fail_students"] for c in rows),
+    }
+
+
+def school_facts(
+    session: Session,
+    period: Period,
+    config: AnalyticsConfig,
+    *,
+    school_year_id: int,
+) -> dict[str, Any] | None:
+    """Số liệu toàn trường cho báo cáo của BGH (D-127): tóm tắt từng khối và tổng toàn trường.
+
+    Cộng dồn số liệu cấp khối (build_grade_overview) nên không nêu tên lớp hay học sinh nào; không
+    có công thức Thông tư 22 nào ở đây, chỉ gom các con số đã tính sẵn.
+    """
+    grades: list[dict[str, Any]] = []
+    for grade in SCHOOL_GRADES:
+        summary = _grade_summary(session, grade, period, config, school_year_id=school_year_id)
+        if summary is not None:
+            grades.append(summary)
+    if not grades:
+        return None
+    return {
+        "period": PERIOD_LABELS[period],
+        "grade_count": len(grades),
+        "student_count": sum(g["student_count"] for g in grades),
+        "grades": [
+            {
+                **g,
+                "learning_levels": _levels(g["learning_levels"]),
+                "conduct_levels": _levels(g["conduct_levels"]),
+            }
+            for g in grades
+        ],
+        "totals": {
+            "learning_levels": _levels(_sum_counts([g["learning_levels"] for g in grades])),
+            "conduct_levels": _levels(_sum_counts([g["conduct_levels"] for g in grades])),
+            "students_absent_from_warning_level": sum(
+                g["students_absent_from_warning_level"] for g in grades
+            ),
+            "students_absent_over_maximum": sum(g["students_absent_over_maximum"] for g in grades),
+            "students_with_a_very_low_subject": sum(
+                g["students_with_a_very_low_subject"] for g in grades
+            ),
+        },
+    }
+
+
 def grade_facts(
     session: Session,
     grade_level: int,

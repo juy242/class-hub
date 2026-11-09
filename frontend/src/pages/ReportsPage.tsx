@@ -8,6 +8,8 @@ import { PageTitle, Panel } from '../components/Panel'
 import { PeriodSelect } from '../components/PeriodSelect'
 import { QueryState } from '../components/QueryState'
 import { AggregateReport } from '../components/reports/AggregateReport'
+import { ClassFigures, GradeFigures } from '../components/reports/ReportFigures'
+import { ReportOversight } from '../components/reports/ReportOversight'
 import { TYPE_HINTS, TYPE_LABELS } from '../components/reports/options'
 import { StudentReports } from '../components/reports/StudentReports'
 import { useGradeOverview, usePeriod } from '../hooks/useAnalytics'
@@ -239,23 +241,34 @@ function TeacherWorkspace({ data, ...props }: WorkspaceProps & { data: Assignmen
   )
 }
 
+const SCHOOL = 'school' // giá trị trong ô "Khối" để chọn báo cáo toàn trường (D-127)
+
 function PrincipalWorkspace({ grades, ...props }: WorkspaceProps & { grades: number[] }) {
   const { type, period, params, setParam } = props
-  const requested = Number(params.get('grade'))
+  const gradeParam = params.get('grade')
+  const isSchool = gradeParam === SCHOOL
+  const requested = Number(gradeParam)
   const grade = grades.find((item) => item === requested) ?? grades[0]
   // Danh sách lớp của khối lấy từ tổng quan khối (cùng nguồn với màn hình so sánh các lớp).
   const overview = useGradeOverview(grade, '1')
-  const { yearId } = useSelectedYear() // báo cáo khối của năm đang chọn (D-113)
-  const classes = overview.data?.classes ?? []
-  const classId = classes.find((item) => item.class_id === Number(params.get('class')))?.class_id
-  const target: ReportTarget =
-    classId === undefined
-      ? { type, semester: period, gradeLevel: grade, schoolYearId: yearId }
-      : { type, semester: period, classId }
-  const scopeLabel =
-    classId === undefined
-      ? `khối ${grade}`
-      : `lớp ${classes.find((item) => item.class_id === classId)?.name ?? ''}`
+  const { yearId } = useSelectedYear() // báo cáo khối / toàn trường của năm đang chọn (D-113)
+  const classes = isSchool ? [] : (overview.data?.classes ?? [])
+  const classId = isSchool
+    ? undefined
+    : classes.find((item) => item.class_id === Number(params.get('class')))?.class_id
+
+  let target: ReportTarget
+  let scopeLabel: string
+  if (isSchool) {
+    target = { type, semester: period, schoolYearId: yearId }
+    scopeLabel = 'toàn trường'
+  } else if (classId === undefined) {
+    target = { type, semester: period, gradeLevel: grade, schoolYearId: yearId }
+    scopeLabel = `khối ${grade}`
+  } else {
+    target = { type, semester: period, classId }
+    scopeLabel = `lớp ${classes.find((item) => item.class_id === classId)?.name ?? ''}`
+  }
 
   return (
     <>
@@ -267,10 +280,11 @@ function PrincipalWorkspace({ grades, ...props }: WorkspaceProps & { grades: num
             </label>
             <select
               id="khoi"
-              value={grade}
+              value={isSchool ? SCHOOL : grade}
               onChange={(event) => setParam({ grade: event.target.value, class: null })}
               className="input mt-1"
             >
+              <option value={SCHOOL}>Cả trường</option>
               {grades.map((item) => (
                 <option key={item} value={item}>
                   Khối {item}
@@ -278,28 +292,57 @@ function PrincipalWorkspace({ grades, ...props }: WorkspaceProps & { grades: num
               ))}
             </select>
           </div>
-          <div>
-            <label htmlFor="lop-hoac-khoi" className="label">
-              Phạm vi
-            </label>
-            <select
-              id="lop-hoac-khoi"
-              value={classId === undefined ? '' : String(classId)}
-              onChange={(event) => setParam({ class: event.target.value || null })}
-              className="input mt-1"
-            >
-              <option value="">Cả khối {grade}</option>
-              {classes.map((item) => (
-                <option key={item.class_id} value={item.class_id}>
-                  Lớp {item.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isSchool && (
+            <div>
+              <label htmlFor="lop-hoac-khoi" className="label">
+                Phạm vi
+              </label>
+              <select
+                id="lop-hoac-khoi"
+                value={classId === undefined ? '' : String(classId)}
+                onChange={(event) => setParam({ class: event.target.value || null })}
+                className="input mt-1"
+              >
+                <option value="">Cả khối {grade}</option>
+                {classes.map((item) => (
+                  <option key={item.class_id} value={item.class_id}>
+                    Lớp {item.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </Toolbar>
+      {!isSchool && classId === undefined && (
+        <Panel
+          id="giam-sat-nhan-xet"
+          title="Giám sát tiến độ nhận xét"
+          description={`Mỗi lớp của khối ${grade} đã viết và duyệt nhận xét tới đâu`}
+        >
+          <ReportOversight
+            grade={grade}
+            period={period}
+            schoolYearId={yearId}
+            onOpenClass={(id) => setParam({ class: String(id) })}
+          />
+        </Panel>
+      )}
+      {!isSchool && (
+        <Panel
+          id="so-lieu-tong-hop"
+          title="Số liệu tổng hợp"
+          description={`Số liệu hệ thống đã tính cho ${scopeLabel} — bối cảnh để đọc và duyệt báo cáo`}
+        >
+          {classId === undefined ? (
+            <GradeFigures grade={grade} period={period} />
+          ) : (
+            <ClassFigures classId={classId} period={period} />
+          )}
+        </Panel>
+      )}
       <ReportBody
-        key={`${grade}-${classId ?? 'khoi'}-${period}`}
+        key={`${isSchool ? SCHOOL : grade}-${classId ?? 'khoi'}-${period}`}
         target={target}
         scopeLabel={scopeLabel}
         initialStudentId={null}

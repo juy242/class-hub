@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.auth.tokens import create_access_token
-from app.classes.models import ClassStudent, SchoolClass, SchoolYear, Subject
+from app.classes.models import ClassStudent, SchoolClass, SchoolYear, Student, Subject
 from app.core.db import get_engine
 from app.core.enums import UserRole
 from app.main import app
@@ -35,6 +35,7 @@ from data.samples.build_diem_30_lop import (
     CLASSES_PER_GRADE,
     GRADES,
     OUTPUT,
+    YEAR_CODE,
     YEAR_NAME,
     class_subjects,
     slug,
@@ -111,21 +112,40 @@ def main() -> int:
     for grade in GRADES:
         for index in range(1, CLASSES_PER_GRADE + 1):
             name = f"{grade}A{index}"
+            sample_code = f"HS{YEAR_CODE}{grade}{index:02d}01"
             with Session(engine) as session:
                 school_class = session.scalar(
                     select(SchoolClass).where(
                         SchoolClass.school_year_id == year_id, SchoolClass.name == name
                     )
                 )
-                members = (
-                    session.scalar(
+                members = 0
+                is_this_set = False
+                if school_class is not None:
+                    members = session.scalar(
                         select(func.count())
                         .select_from(ClassStudent)
                         .where(ClassStudent.class_id == school_class.id)
                     )
-                    if school_class
-                    else 0
-                )
+                    # Lớp này đã mang đúng danh sách của bộ diem-30-lop chưa (mã HS26…)?
+                    is_this_set = (
+                        session.scalar(
+                            select(func.count())
+                            .select_from(ClassStudent)
+                            .join(Student, Student.id == ClassStudent.student_id)
+                            .where(
+                                ClassStudent.class_id == school_class.id,
+                                Student.student_code == sample_code,
+                            )
+                        )
+                        > 0
+                    )
+
+            # Lớp trùng tên nhưng đã có danh sách KHÁC bộ 30 lớp (ví dụ lớp seed mã HS11…):
+            # giữ nguyên, không nhập đè điểm (theo yêu cầu "để nguyên lớp đã có").
+            if school_class is not None and members and not is_this_set:
+                print(f"{name}: giữ nguyên {members} HS seed (khác bộ 30 lớp).", flush=True)
+                continue
 
             # 2. Lớp và GVCN.
             if school_class is None:

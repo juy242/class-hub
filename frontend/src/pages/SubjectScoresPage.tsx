@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { ScoreRow, SubjectScores } from '../api/analytics'
 import { DistributionChart } from '../components/charts/DistributionChart'
+import { SubjectExamForecast } from '../components/forecast/ExamForecast'
 import { PageTitle, Panel } from '../components/Panel'
 import { PeriodSelect } from '../components/PeriodSelect'
 import { QueryState } from '../components/QueryState'
@@ -534,6 +535,11 @@ export default function SubjectScoresPage() {
     (assignments.data.user.role === 'principal' ||
       assignments.data.homeroom_classes.some((item) => item.id === classId))
   const data = scores.data
+  // Dự báo điểm thi tốt nghiệp: chỉ giáo viên (GVCN/GVBM), lớp 12, môn tính điểm (D-123).
+  const showForecast =
+    assignments.data?.user.role === 'teacher' &&
+    data?.class_info.grade_level === 12 &&
+    data.subject.assessment_type === 'score'
 
   return (
     <>
@@ -567,6 +573,7 @@ export default function SubjectScoresPage() {
         semester={period === '2' ? 2 : 1}
         canPlan={canImport}
       />
+      {showForecast && <SubjectExamForecast classId={classId} subjectId={subjectId} />}
     </>
   )
 }

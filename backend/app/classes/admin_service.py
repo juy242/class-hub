@@ -14,9 +14,11 @@ from app.auth.models import User
 from app.classes.academic import Assessment, Attendance, ConductResult, ExamRegistration
 from app.classes.admin_schemas import (
     AdminClassOut,
+    AdminStudentRow,
     AssignmentRow,
     ClassAssignmentsOut,
     ClassCreateIn,
+    ClassRosterOut,
     ClassUpdateIn,
     SchoolOut,
     SchoolYearCreatedOut,
@@ -522,6 +524,30 @@ def delete_class(session: Session, admin: User, class_id: int) -> None:
 
 
 # --- Phân công giảng dạy --------------------------------------------------
+
+
+def get_class_roster(session: Session, admin: User, class_id: int) -> ClassRosterOut:
+    """Danh sách học sinh của một lớp cho Admin: chỉ mã, họ tên, ngày sinh để phân biệt (D-122).
+
+    Nới D-039 ở đúng ba trường định danh này. KHÔNG trả họ tên / số điện thoại phụ huynh và
+    KHÔNG trả điểm, điểm danh, rèn luyện hay cảnh báo.
+    """
+    school_class = _get_class(session, class_id)
+    rows = session.execute(
+        select(Student.student_code, Student.full_name, Student.date_of_birth)
+        .join(ClassStudent, ClassStudent.student_id == Student.id)
+        .where(ClassStudent.class_id == class_id)
+        .order_by(Student.student_code)
+    ).all()
+    record_access(session, admin, AuditAction.VIEW_CLASS_STUDENTS, class_id=class_id, details={})
+    return ClassRosterOut(
+        class_id=school_class.id,
+        class_name=school_class.name,
+        students=[
+            AdminStudentRow(student_code=code, full_name=name, date_of_birth=dob)
+            for code, name, dob in rows
+        ],
+    )
 
 
 def get_class_assignments(session: Session, class_id: int) -> ClassAssignmentsOut:

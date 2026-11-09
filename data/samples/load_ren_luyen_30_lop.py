@@ -19,14 +19,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.models import User
 from app.auth.tokens import create_access_token
-from app.classes.models import SchoolClass, SchoolYear
+from app.classes.models import ClassStudent, SchoolClass, SchoolYear, Student
 from app.core.db import get_engine
+from app.core.enums import UserRole
 from app.main import app
-from data.samples.build_diem_30_lop import CLASSES_PER_GRADE, GRADES, YEAR_NAME
+from data.samples.build_diem_30_lop import CLASSES_PER_GRADE, GRADES, YEAR_CODE, YEAR_NAME
 from data.samples.build_ren_luyen_30_lop import FILE_NAMES, OUTPUT
 
 API = "/api/v1"
+ADMIN_EMAIL = "admin@example.com"
 
 
 def headers(user_id: int) -> dict[str, str]:
@@ -52,6 +55,60 @@ def main() -> int:
                 select(SchoolClass).where(SchoolClass.school_year_id == year.id)
             )
         }
+        # Lớp mang danh sách của bộ 30 lớp (mã HS26…); lớp seed trùng tên (mã HS1x…) không có.
+        set_class_ids = set(
+            session.scalars(
+                select(ClassStudent.class_id)
+                .join(Student, Student.id == ClassStudent.student_id)
+                .where(Student.student_code.like(f"HS{YEAR_CODE}%"))
+                .distinct()
+            )
+        )
+        admin = session.scalar(select(User).where(User.email == ADMIN_EMAIL))
+        if admin is None:
+            raise SystemExit(f"Không có tài khoản admin {ADMIN_EMAIL}.")
+        admin_id = admin.id
+        homeroom_ids = {hid for _, hid in classes.values() if hid is not None}
+        free_teachers = [
+            (u.id, u.email)
+            for u in session.scalars(
+                select(User).where(User.role == UserRole.TEACHER, User.is_active.is_(True))
+            )
+            if u.id not in homeroom_ids
+        ]
+    free_teachers.sort(key=lambda t: t[1])
+
+    # Phân giáo viên chủ nhiệm cho lớp chưa có GVCN (các lớp A4…A10 do load_diem tạo khi kế hoạch
+    # GVCN @thpt-demo.local chưa có tài khoản). Dùng giáo viên seed đang rảnh (mỗi năm một GVCN một
+    # lớp, D-113), qua đúng API admin (kiểm quyền, nhật ký).
+    admin_headers = headers(admin_id)
+    pool = iter(free_teachers)
+    assigned: list[str] = []
+    for grade in GRADES:
+        for index in range(1, CLASSES_PER_GRADE + 1):
+            name = f"{grade}A{index}"
+            if name not in classes:
+                raise SystemExit(f"Năm {YEAR_NAME} chưa có lớp {name}.")
+            class_id, homeroom_id = classes[name]
+            if homeroom_id is not None:
+                continue
+            teacher = next(pool, None)
+            if teacher is None:
+                raise SystemExit("Không đủ giáo viên đang rảnh để phân chủ nhiệm.")
+            check(
+                client.patch(
+                    f"{API}/admin/classes/{class_id}",
+                    headers=admin_headers,
+                    json={"homeroom_teacher_id": teacher[0]},
+                ),
+                f"phân công GVCN lớp {name}",
+            )
+            classes[name] = (class_id, teacher[0])
+            assigned.append(f"{name}: {teacher[1]}")
+    if assigned:
+        print(f"Đã phân chủ nhiệm {len(assigned)} lớp:", flush=True)
+        for line in assigned:
+            print(f"  - {line}")
 
     totals: Counter[str] = Counter()
     skipped: list[str] = []
@@ -61,6 +118,9 @@ def main() -> int:
             if name not in classes:
                 raise SystemExit(f"Năm {YEAR_NAME} chưa có lớp {name}.")
             class_id, homeroom_id = classes[name]
+            if class_id not in set_class_ids:
+                print(f"{name}: giữ nguyên rèn luyện seed (khác bộ 30 lớp).", flush=True)
+                continue
             if homeroom_id is None:
                 skipped.append(name)
                 continue

@@ -112,6 +112,13 @@ def build_document(session: Session, report: Report) -> pdf.PdfDocument:
         "approved_on": approved_on,
     }
 
+    if report.scope is ReportScope.SCHOOL:
+        return pdf.PdfDocument(
+            title="BÁO CÁO TOÀN TRƯỜNG",
+            subtitle=period,
+            info=[("Phạm vi", "Toàn trường")],
+            **common,
+        )
     if report.scope is ReportScope.GRADE:
         return pdf.PdfDocument(
             title=f"BÁO CÁO KHỐI {report.target_id}",
@@ -190,6 +197,8 @@ def file_name(report: Report, session: Session) -> str:
         resolved = service.resolved_of(session, report)
         if resolved.info is not None:
             parts.append(resolved.info.name)
+    elif report.scope is ReportScope.SCHOOL:
+        parts.append("toan-truong")
     else:
         parts.append(f"khoi-{report.target_id}")
     parts.append("ca-nam" if report.semester == "year" else f"hk{report.semester}")

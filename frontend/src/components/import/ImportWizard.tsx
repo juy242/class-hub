@@ -247,21 +247,32 @@ export function ImportWizard({
         </div>
 
         {settings.kind === 'lessons' && (
-          <label className="block text-sm font-medium text-slate-700 sm:max-w-xs">
-            Môn
-            <select
-              value={settings.subjectId ?? ''}
-              disabled={busy}
-              onChange={(event) => changeSettings({ subjectId: Number(event.target.value) })}
-              className={selectClass()}
-            >
-              {subjects.map((subject) => (
-                <option key={subject.id} value={subject.id}>
-                  {subject.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <>
+            <label className="block text-sm font-medium text-slate-700 sm:max-w-xs">
+              Môn
+              <select
+                value={settings.subjectId ?? ''}
+                disabled={busy}
+                onChange={(event) => changeSettings({ subjectId: Number(event.target.value) })}
+                className={selectClass()}
+              >
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600 ring-1 ring-slate-200">
+              <strong className="font-semibold text-slate-700">Không bắt buộc.</strong> Điểm danh
+              tiết là sổ theo dõi riêng của môn (nắm trốn tiết, đi muộn, về sớm). Số buổi nghỉ để xét
+              điều kiện lên lớp và mọi cảnh báo chuyên cần lấy từ{' '}
+              <strong className="font-semibold text-slate-700">
+                điểm danh ngày của giáo viên chủ nhiệm
+              </strong>
+              , không phải từ tệp này.
+            </p>
+          </>
         )}
 
         {settings.kind === 'assessments' && (

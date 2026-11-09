@@ -15,6 +15,7 @@ import { ATTENTION_LABELS, LEVEL_LABELS } from '../../lib/labels'
 import { axisTick, gridProps, legendProps, tooltipProps } from '../charts/theme'
 import type { StackMode } from '../charts/ClassLevelsChart'
 import { StatCard, StatGrid } from '../StatCard'
+import type { ClassOrder } from './order'
 
 // Phần nhìn nhanh cho BGH ở trang Khối. Mọi số đếm do Analytics (back-end) tính; ở đây chỉ cộng các
 // lớp thành toàn khối và chia cho sĩ số để hiển thị tỉ lệ (không phải số của Thông tư, D-117).
@@ -60,7 +61,8 @@ const INDICATORS: Indicator[] = [
   },
 ]
 
-// Ba chỉ số chính vẽ trên biểu đồ; bảng có đủ năm.
+// Ba chỉ số chính vẽ trên biểu đồ; bảng có đủ năm. Biểu đồ "cần quan tâm" xếp theo tổng ba chỉ số
+// này khi BGH chọn "Cần chú ý nhất" (xem attentionSum trong ./order).
 const CHART_INDICATORS = INDICATORS.slice(0, 3)
 
 // Tỉ lệ phần trăm (0 đến 100) chỉ để vẽ; lớp không có học sinh thì 0.
@@ -229,10 +231,44 @@ export function ModeToggle({
   )
 }
 
+// --- Nút chọn thứ tự lớp (Theo tên / Cần chú ý) -------------------------------------------------
+
+export function OrderToggle({
+  value,
+  onChange,
+}: {
+  value: ClassOrder
+  onChange: (order: ClassOrder) => void
+}) {
+  const choices: { value: ClassOrder; label: string }[] = [
+    { value: 'name', label: 'Theo tên lớp' },
+    { value: 'attention', label: 'Cần chú ý nhất' },
+  ]
+  return (
+    <div role="group" aria-label="Thứ tự các lớp trên biểu đồ" className="flex gap-1">
+      {choices.map((choice) => (
+        <button
+          key={choice.value}
+          type="button"
+          aria-pressed={value === choice.value}
+          onClick={() => onChange(choice.value)}
+          className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+            value === choice.value
+              ? 'border-brand-700 bg-brand-700 text-white'
+              : 'border-slate-300 hover:bg-slate-100'
+          }`}
+        >
+          {choice.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // --- Tỉ lệ học sinh cần quan tâm theo lớp ------------------------------------------------------
 
-export function AttentionRateChart({ overview }: { overview: GradeOverview }) {
-  const data = overview.classes.map((item) => ({
+export function AttentionRateChart({ classes }: { classes: ClassOverview[] }) {
+  const data = classes.map((item) => ({
     name: item.name,
     total: item.student_count,
     ...Object.fromEntries(
@@ -284,8 +320,7 @@ function heat(rate: number, max: number): CSSProperties | undefined {
   return { backgroundColor: `color-mix(in srgb, var(--chart-fail) ${strength}%, transparent)` }
 }
 
-export function AttentionTable({ overview }: { overview: GradeOverview }) {
-  const { classes } = overview
+export function AttentionTable({ classes }: { classes: ClassOverview[] }) {
   const total = sum(classes, (item) => item.student_count)
   const maxRate = Object.fromEntries(
     INDICATORS.map((indicator) => [

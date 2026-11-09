@@ -2,7 +2,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import type { ClassSubjectResult, GradeOverview, GradeSubject } from '../api/analytics'
+import type { ClassOverview, ClassSubjectResult, GradeOverview, GradeSubject } from '../api/analytics'
 import { ClassLevelsChart, ClassStackChart } from '../components/charts/ClassLevelsChart'
 import type { StackMode } from '../components/charts/ClassLevelsChart'
 import { CompareChart } from '../components/charts/CompareChart'
@@ -12,7 +12,10 @@ import {
   AttentionTable,
   GradeKpis,
   ModeToggle,
+  OrderToggle,
 } from '../components/grade/GradeInsights'
+import { orderClasses } from '../components/grade/order'
+import type { ClassOrder } from '../components/grade/order'
 import { PageTitle, Panel } from '../components/Panel'
 import { PeriodSelect } from '../components/PeriodSelect'
 import { QueryState } from '../components/QueryState'
@@ -36,7 +39,7 @@ function Th({ children, right = true }: { children: ReactNode; right?: boolean }
   )
 }
 
-function ClassesTable({ overview }: { overview: GradeOverview }) {
+function ClassesTable({ classes }: { classes: ClassOverview[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="data-table min-w-max">
@@ -55,7 +58,7 @@ function ClassesTable({ overview }: { overview: GradeOverview }) {
           </tr>
         </thead>
         <tbody>
-          {overview.classes.map((item) => (
+          {classes.map((item) => (
             <tr key={item.class_id}>
               <th scope="row" className="px-3 py-2 font-normal">
                 <Link to={`/classes/${item.class_id}`} className="link">
@@ -144,18 +147,20 @@ function SubjectName({ subject, total }: { subject: GradeSubject; total: number 
 function SubjectRows({
   subjects,
   total,
+  classes,
   first,
   second,
 }: {
   subjects: GradeSubject[]
   total: number
+  classes: ClassOverview[]
   first: GradeOverview
   second: GradeOverview
 }) {
   return subjects.map((item) => (
     <tr key={item.subject_id}>
       <SubjectName subject={item} total={total} />
-      {first.classes.map((klass) => (
+      {classes.map((klass) => (
         <CompareCell
           key={klass.class_id}
           subject={item}
@@ -179,14 +184,16 @@ function Comparison({ first, second }: { first: GradeOverview; second: GradeOver
   const commentSubjects = subjects.filter((subject) => subject.assessment_type === 'comment')
   const subject =
     subjects.find((item) => item.subject_id === chosen) ?? scoreSubjects[0] ?? subjects[0]
-  const total = first.classes.length
+  // So sánh HK I–II giữ thứ tự theo tên lớp (tự nhiên), không xếp theo mức cần chú ý.
+  const orderedClasses = orderClasses(first.classes, 'name')
+  const total = orderedClasses.length
   const isScore = subject?.assessment_type !== 'comment'
 
   // Biểu đồ chỉ có các lớp học môn đang chọn.
   const subjectData: CompareDatum[] =
     subject === undefined
       ? []
-      : first.classes
+      : orderedClasses
           .filter((item) => subject.class_means.some((result) => result.class_id === item.class_id))
           .map((item) => {
             const a = resultOf(first, subject.subject_id, item.class_id)
@@ -195,7 +202,7 @@ function Comparison({ first, second }: { first: GradeOverview; second: GradeOver
               ? { name: item.name, first: a?.mean ?? null, second: b?.mean ?? null }
               : { name: item.name, first: a?.comment_fail ?? 0, second: b?.comment_fail ?? 0 }
           })
-  const failData: CompareDatum[] = first.classes.map((item) => ({
+  const failData: CompareDatum[] = orderedClasses.map((item) => ({
     name: item.name,
     first: item.learning_levels.fail ?? 0,
     second: second.classes.find((other) => other.class_id === item.class_id)?.learning_levels.fail ?? 0,
@@ -263,13 +270,19 @@ function Comparison({ first, second }: { first: GradeOverview; second: GradeOver
           <thead>
             <tr>
               <Th right={false}>Môn</Th>
-              {first.classes.map((item) => (
+              {orderedClasses.map((item) => (
                 <Th key={item.class_id}>{item.name}</Th>
               ))}
             </tr>
           </thead>
           <tbody>
-            <SubjectRows subjects={scoreSubjects} total={total} first={first} second={second} />
+            <SubjectRows
+              subjects={scoreSubjects}
+              total={total}
+              classes={orderedClasses}
+              first={first}
+              second={second}
+            />
             {commentSubjects.length > 0 && (
               <tr>
                 <th
@@ -281,7 +294,13 @@ function Comparison({ first, second }: { first: GradeOverview; second: GradeOver
                 </th>
               </tr>
             )}
-            <SubjectRows subjects={commentSubjects} total={total} first={first} second={second} />
+            <SubjectRows
+              subjects={commentSubjects}
+              total={total}
+              classes={orderedClasses}
+              first={first}
+              second={second}
+            />
           </tbody>
         </table>
       </div>
@@ -319,20 +338,29 @@ export default function GradeOverviewPage() {
   const second = useGradeOverview(level, '2')
   const [learningMode, setLearningMode] = useState<StackMode>('percent')
   const [conductMode, setConductMode] = useState<StackMode>('percent')
+  const [order, setOrder] = useState<ClassOrder>('name')
 
   return (
     <>
       <PageTitle
         title={`Khối ${level}`}
         subtitle="So sánh các lớp trong khối"
-        actions={<PeriodSelect value={period} options={PERIODS} onChange={setPeriod} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+              <span className="whitespace-nowrap">Xếp lớp trên biểu đồ</span>
+              <OrderToggle value={order} onChange={setOrder} />
+            </label>
+            <PeriodSelect value={period} options={PERIODS} onChange={setPeriod} />
+          </div>
+        }
       />
       <QueryState query={selected}>
         {(overview) => (
           <>
             <GradeKpis overview={overview} />
             <Panel id="cac-lop" title={`Các lớp · ${PERIOD_LABELS[period]}`}>
-              <ClassesTable overview={overview} />
+              <ClassesTable classes={orderClasses(overview.classes, 'name')} />
             </Panel>
             <Panel
               id="muc-hoc-tap"
@@ -351,7 +379,7 @@ export default function GradeOverviewPage() {
               }
             >
               <ClassLevelsChart
-                classes={overview.classes}
+                classes={orderClasses(overview.classes, order, 'learning')}
                 mode={learningMode}
                 label={
                   learningMode === 'percent'
@@ -366,8 +394,8 @@ export default function GradeOverviewPage() {
               description="Phần trăm trên sĩ số của lớp: lớp có cột cao cần BGH và GVCN chú ý trước."
             >
               <div className="space-y-6">
-                <AttentionRateChart overview={overview} />
-                <AttentionTable overview={overview} />
+                <AttentionRateChart classes={orderClasses(overview.classes, order, 'attention')} />
+                <AttentionTable classes={orderClasses(overview.classes, order, 'attention')} />
               </div>
             </Panel>
             <div className="grid gap-6 xl:grid-cols-2">
@@ -384,7 +412,7 @@ export default function GradeOverviewPage() {
                 }
               >
                 <ClassLevelsChart
-                  classes={overview.classes}
+                  classes={orderClasses(overview.classes, order, 'conduct')}
                   field="conduct_levels"
                   mode={conductMode}
                   label="Kết quả rèn luyện của từng lớp"
@@ -401,7 +429,7 @@ export default function GradeOverviewPage() {
               >
                 {period === 'year' ? (
                   <ClassStackChart
-                    rows={overview.classes.map((item) => ({
+                    rows={orderClasses(overview.classes, order, 'promotion').map((item) => ({
                       name: item.name,
                       total: item.student_count,
                       counts: { ...(item.promotion ?? {}) },

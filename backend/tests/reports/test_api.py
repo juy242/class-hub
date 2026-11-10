@@ -1044,3 +1044,183 @@ def test_whole_school_report_lists_approves_and_exports_pdf(
     pdf = api_client.get(f"{REPORTS}/{report_id}/export", headers=auth_headers(PRINCIPAL))
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
+
+
+# --- Tự viết thủ công, không gọi AI (D-129) --------------------------------------------------
+
+
+def manual_slip_body(class_id: int, student_id: int, **extra: Any) -> dict[str, Any]:
+    return slip_body(class_id, student_id, manual=True, **extra)
+
+
+def test_manual_creates_an_empty_draft_without_calling_the_llm(
+    db_session: Session,
+    api_client: TestClient,
+    auth_headers: Headers,
+    use_llm: UseLlm,
+    class_id_of: Callable[[str], int],
+    an_id: int,
+    user_of: Callable[[str], User],
+) -> None:
+    writer = FakeWriter()
+    use_llm(writer)
+    response = api_client.post(
+        REPORTS, json=manual_slip_body(class_id_of("11A2"), an_id), headers=auth_headers(GVCN_11A2)
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["text"] == "" and body["needs_manual"] is True and body["attempts"] == 0
+    assert body["status"] == "draft" and body["model"] is None and body["check_notes"] == []
+    assert body["student"]["student_code"] == AN
+    assert writer.calls == []  # không gọi LLM lần nào: đây chính là mục đích của nút tự viết
+
+    row = db_session.get(Report, body["id"])
+    assert row is not None and row.draft_text == "" and row.status is ReportStatus.DRAFT
+    assert row.created_by == user_of(GVCN_11A2).id and row.approved_by is None
+
+
+def test_manual_works_even_when_the_llm_is_not_configured(
+    api_client: TestClient,
+    auth_headers: Headers,
+    use_llm: UseLlm,
+    class_id_of: Callable[[str], int],
+    an_id: int,
+) -> None:
+    # Dự phòng khi AI hết hạn mức / chưa cấu hình: đường sinh bằng AI là 503, tự viết vẫn 201.
+    use_llm(error=LLMNotConfigured("thiếu khoá"))
+    body = slip_body(class_id_of("11A2"), an_id)
+    assert api_client.post(REPORTS, json=body, headers=auth_headers(GVCN_11A2)).status_code == 503
+    manual = api_client.post(
+        REPORTS, json={**body, "manual": True}, headers=auth_headers(GVCN_11A2)
+    )
+    assert manual.status_code == 201 and manual.json()["needs_manual"] is True
+
+
+@pytest.mark.parametrize(
+    ("email", "type_", "cls", "subject", "grade", "student_class", "expected"), CREATE_MATRIX
+)
+def test_manual_follows_the_same_permission_matrix(
+    api_client: TestClient,
+    auth_headers: Headers,
+    class_id_of: Callable[[str], int],
+    subject_id_of: Callable[[str], int],
+    first_student_of: Callable[[str], int],
+    email: str,
+    type_: str,
+    cls: str | None,
+    subject: str | None,
+    grade: int | None,
+    student_class: str | None,
+    expected: int,
+) -> None:
+    # Không cài LLM: nếu đường tự viết lỡ gọi provider thì test sẽ sập, bắt được lỗi.
+    body: dict[str, Any] = {"type": type_, "semester": "1", "manual": True}
+    if cls:
+        body["class_id"] = class_id_of(cls)
+    if subject:
+        body["subject_id"] = subject_id_of(subject)
+    if grade:
+        body["grade_level"] = grade
+    if student_class:
+        body["student_id"] = first_student_of(student_class)
+
+    response = api_client.post(REPORTS, json=body, headers=auth_headers(email))
+    assert response.status_code == expected, response.text
+
+
+def test_manual_on_an_existing_draft_opens_it_and_on_an_approved_one_is_409(
+    db_session: Session,
+    api_client: TestClient,
+    auth_headers: Headers,
+    class_id_of: Callable[[str], int],
+    an_id: int,
+    make_slip: Callable[..., dict[str, Any]],
+) -> None:
+    created = make_slip()  # đã có bản nháp do AI sinh
+    headers = auth_headers(GVCN_11A2)
+    again = api_client.post(
+        REPORTS, json=manual_slip_body(class_id_of("11A2"), an_id), headers=headers
+    )
+    assert again.status_code == 201 and again.json()["id"] == created["id"]
+    assert len(db_session.scalars(select(Report)).all()) == 1  # không tạo thêm dòng
+
+    api_client.put(f"{REPORTS}/{created['id']}", json={"approve": True}, headers=headers)
+    blocked = api_client.post(
+        REPORTS, json=manual_slip_body(class_id_of("11A2"), an_id), headers=headers
+    )
+    assert blocked.status_code == 409
+
+
+def test_a_manual_draft_can_be_written_and_approved(
+    db_session: Session,
+    api_client: TestClient,
+    auth_headers: Headers,
+    use_llm: UseLlm,
+    class_id_of: Callable[[str], int],
+    an_id: int,
+) -> None:
+    use_llm(FakeWriter())
+    headers = auth_headers(GVCN_11A2)
+    created = api_client.post(
+        REPORTS, json=manual_slip_body(class_id_of("11A2"), an_id), headers=headers
+    ).json()
+    refused = put(api_client, headers, created["id"], approve=True)  # rỗng thì chưa duyệt được
+    assert refused.status_code == 409
+
+    written = put(api_client, headers, created["id"], text=EDITED, approve=True)
+    assert written.status_code == 200
+    assert written.json()["status"] == "approved" and written.json()["needs_manual"] is False
+    row = db_session.get(Report, created["id"])
+    assert row is not None and row.final_text == EDITED
+
+
+def test_manual_is_audited_as_a_manual_creation(
+    db_session: Session,
+    api_client: TestClient,
+    auth_headers: Headers,
+    class_id_of: Callable[[str], int],
+    an_id: int,
+    user_of: Callable[[str], User],
+) -> None:
+    body = api_client.post(
+        REPORTS,
+        json=manual_slip_body(class_id_of("11A2"), an_id),
+        headers=auth_headers(GVCN_11A2),
+    ).json()
+    log = db_session.scalars(
+        select(AuditLog).where(AuditLog.action == AuditAction.GENERATE_REPORT)
+    ).one()
+    assert log.user_id == user_of(GVCN_11A2).id and log.class_id == body["class_id"]
+    assert log.details["manual"] is True and log.details["report_id"] == body["id"]
+
+
+def test_manual_aggregate_report_needs_no_llm(
+    api_client: TestClient, auth_headers: Headers, class_id_of: Callable[[str], int]
+) -> None:
+    body = {"type": "report", "semester": "1", "class_id": class_id_of("11A2"), "manual": True}
+    response = api_client.post(REPORTS, json=body, headers=auth_headers(GVCN_11A2))
+    assert response.status_code == 201, response.text
+    assert response.json()["scope"] == "class" and response.json()["needs_manual"] is True
+
+
+@pytest.mark.parametrize(
+    "bad_body",
+    [
+        # Tự viết nhận xét học sinh phải chọn một em.
+        {"type": "contact_slip", "semester": "1", "class_id": 1, "manual": True},
+        # Tự viết thì không kèm góp ý cho AI.
+        {
+            "type": "contact_slip",
+            "semester": "1",
+            "class_id": 1,
+            "student_id": 1,
+            "manual": True,
+            "feedback": "nhẹ nhàng hơn",
+        },
+    ],
+)
+def test_malformed_manual_requests_are_422(
+    api_client: TestClient, auth_headers: Headers, bad_body: dict[str, Any]
+) -> None:
+    response = api_client.post(REPORTS, json=bad_body, headers=auth_headers(GVCN_11A2))
+    assert response.status_code == 422

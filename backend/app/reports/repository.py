@@ -191,6 +191,43 @@ def store_outcome(
     return existing
 
 
+def create_manual(session: Session, key: ReportKey, *, user_id: int) -> Report:
+    """Tạo một bản nháp RỖNG để giáo viên tự viết, KHÔNG gọi LLM (dự phòng khi AI không dùng được).
+
+    `attempts = 0` cho biết đây là bản giáo viên tự mở (chưa qua AI lần nào), khác với bản AI bó tay
+    (`attempts > 0`). Trả bản sẵn có nếu đã có cùng khoá (service chặn bản đã duyệt trước khi tới).
+    """
+    existing = find_report(session, key)
+    if existing is not None:
+        return existing
+    report = Report(
+        school_year_id=key.school_year_id,
+        scope=key.scope,
+        target_id=key.target_id,
+        type=key.type,
+        semester=key.semester,
+        subject_id=key.subject_id,
+        class_id=key.class_id,
+        created_by=user_id,
+        draft_text="",
+        needs_manual=True,  # trạng thái "Cần tự viết"
+        check_notes=[],
+        attempts=0,
+        model=None,
+        prompt_version=None,
+    )
+    try:
+        with session.begin_nested():
+            session.add(report)
+            session.flush()
+        return report
+    except IntegrityError:  # hai yêu cầu cùng tạo một khoá: lấy bản của yêu cầu kia
+        existing = find_report(session, key)
+        if existing is None:
+            raise
+        return existing
+
+
 # --- Công việc sinh cả lớp --------------------------------------------------------------------
 
 

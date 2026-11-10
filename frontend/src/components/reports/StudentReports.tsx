@@ -1,6 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import type { ReportJob, ReportList, ReportSummary, ReportTarget } from '../../api/reports'
-import { useGenerateReport, useStartClassJob } from '../../hooks/useReports'
+import {
+  useCreateManualReport,
+  useGenerateReport,
+  useStartClassJob,
+} from '../../hooks/useReports'
 import { formatInt, formatScore } from '../../lib/format'
 import { COMMENT_LABELS, levelLabel } from '../../lib/labels'
 import { ErrorAlert } from '../admin/shared'
@@ -144,6 +148,7 @@ interface StudentReportsProps {
 export function StudentReports({ target, list, initialStudentId }: StudentReportsProps) {
   const start = useStartClassJob(target)
   const generate = useGenerateReport(target)
+  const manualCreate = useCreateManualReport(target)
   const [openId, setOpenId] = useState<number | null>(initialStudentId)
   const [warnings, setWarnings] = useState<Record<number, string[]>>({})
 
@@ -154,6 +159,7 @@ export function StudentReports({ target, list, initialStudentId }: StudentReport
   const missing = items.length - written.length
   const running = list.job?.status === 'running'
   const generatingId = generate.isPending ? generate.variables.studentId : undefined
+  const manualCreatingId = manualCreate.isPending ? manualCreate.variables?.studentId : undefined
 
   const startLabel =
     written.length === 0
@@ -189,6 +195,7 @@ export function StudentReports({ target, list, initialStudentId }: StudentReport
       {list.job && <JobStatus job={list.job} />}
       {start.isError && <ErrorAlert error={start.error} />}
       {generate.isError && <ErrorAlert error={generate.error} />}
+      {manualCreate.isError && <ErrorAlert error={manualCreate.error} />}
 
       <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
         {items.map(({ student, report, summary }) => {
@@ -215,20 +222,36 @@ export function StudentReports({ target, list, initialStudentId }: StudentReport
                     {open ? 'Đóng' : 'Mở'}
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      generate.mutate(
-                        { studentId: student.id },
-                        { onSuccess: () => setOpenId(student.id) },
-                      )
-                    }
-                    disabled={generate.isPending || running}
-                    aria-label={`Sinh nhận xét cho ${student.full_name}`}
-                    className="btn-secondary btn-sm"
-                  >
-                    {generatingId === student.id ? 'Đang sinh…' : 'Sinh nhận xét'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        generate.mutate(
+                          { studentId: student.id },
+                          { onSuccess: () => setOpenId(student.id) },
+                        )
+                      }
+                      disabled={generate.isPending || manualCreate.isPending || running}
+                      aria-label={`Sinh nhận xét bằng AI cho ${student.full_name}`}
+                      className="btn-secondary btn-sm"
+                    >
+                      {generatingId === student.id ? 'Đang sinh…' : 'Sinh bằng AI'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        manualCreate.mutate(
+                          { studentId: student.id },
+                          { onSuccess: () => setOpenId(student.id) },
+                        )
+                      }
+                      disabled={generate.isPending || manualCreate.isPending || running}
+                      aria-label={`Tự viết nhận xét cho ${student.full_name}`}
+                      className="btn-secondary btn-sm"
+                    >
+                      {manualCreatingId === student.id ? 'Đang mở…' : 'Tự viết'}
+                    </button>
+                  </div>
                 )}
               </div>
               {open && report !== null && (

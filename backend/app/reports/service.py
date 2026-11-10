@@ -386,6 +386,37 @@ def generate(
     return to_out(report, resolved.student)
 
 
+def create_manual(session: Session, user: User, body: ReportIn) -> ReportOut:
+    """Tạo một bản nháp RỖNG để giáo viên tự viết, KHÔNG gọi LLM (dự phòng khi AI hết mức; D-129).
+
+    Vẫn qua `authorize_report` như mọi đường khác, và bản vẫn ở trạng thái draft (nguyên tắc 6) cho
+    tới khi giáo viên viết và bấm duyệt. Nếu đã có bản cùng khoá thì mở lại bản đó; bản đã duyệt thì
+    báo 409 (phải sửa nội dung để đưa về nháp, không tạo mới).
+    """
+    resolved = resolve(session, user, body, body.student_id)
+    existing = find_report(session, resolved.key)
+    if existing is not None:
+        if existing.status is ReportStatus.APPROVED:
+            raise Conflict("Bản này đã duyệt. Hãy mở bản để sửa nội dung, không cần tạo mới.")
+        return to_out(existing, resolved.student)
+    report = repository.create_manual(session, resolved.key, user_id=user.id)
+    record_access(
+        session,
+        user,
+        AuditAction.GENERATE_REPORT,
+        class_id=resolved.key.class_id,
+        details={
+            "report_id": report.id,
+            "type": resolved.key.type.value,
+            "semester": resolved.key.semester,
+            "count": 1,
+            "needs_manual": True,
+            "manual": True,
+        },
+    )
+    return to_out(report, resolved.student)
+
+
 def regenerate(
     session: Session,
     user: User,

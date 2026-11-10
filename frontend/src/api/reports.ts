@@ -178,6 +178,19 @@ export function startClassJob(target: ReportTarget): Promise<ReportJob> {
   return apiPost<ReportJob>('/reports', targetBody(target))
 }
 
+// Tạo một bản nháp RỖNG để giáo viên tự viết, KHÔNG gọi AI (dự phòng khi AI hết hạn mức). Back-end
+// trả 201 kèm bản nháp (needs_manual = true, text rỗng) để mở thẳng ô soạn thảo.
+export function createManualReport(
+  target: ReportTarget,
+  options: { studentId?: number } = {},
+): Promise<Report> {
+  return apiPost<Report>('/reports', {
+    ...targetBody(target),
+    manual: true,
+    ...(options.studentId !== undefined && { student_id: options.studentId }),
+  })
+}
+
 export function updateReport(
   reportId: number,
   body: { text?: string; approve?: boolean },

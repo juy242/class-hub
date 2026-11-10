@@ -88,6 +88,9 @@ def create_report(
     runner: JobRunnerDep,
 ) -> ReportOut | JobOut:
     with _translate_errors():
+        if body.manual:
+            # Tự viết thủ công: tạo bản nháp rỗng, KHÔNG gọi LLM (dùng được cả khi AI hết hạn mức).
+            return service.create_manual(session, user, body)
         if body.type in STUDENT_TYPES and body.student_id is None:
             job = jobs.start_class_job(session, user, provider_factory, runner, body)
             response.status_code = status.HTTP_202_ACCEPTED

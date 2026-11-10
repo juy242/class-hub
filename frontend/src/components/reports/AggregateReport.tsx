@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Report, ReportTarget } from '../../api/reports'
-import { useGenerateReport } from '../../hooks/useReports'
+import { useCreateManualReport, useGenerateReport } from '../../hooks/useReports'
 import { ErrorAlert } from '../admin/shared'
 import { Icon } from '../Icon'
 import { stateOf, STATE_BADGES, STATE_LABELS } from './options'
@@ -15,6 +15,7 @@ interface AggregateReportProps {
 // Báo cáo tổng hợp một lớp hoặc một khối (không nêu tên học sinh): sinh, sửa, duyệt, xuất PDF.
 export function AggregateReport({ target, report, scopeLabel }: AggregateReportProps) {
   const generate = useGenerateReport(target)
+  const manualCreate = useCreateManualReport(target)
   const [warnings, setWarnings] = useState<string[]>([])
   const state = stateOf(report)
 
@@ -26,22 +27,33 @@ export function AggregateReport({ target, report, scopeLabel }: AggregateReportP
           <span className={STATE_BADGES[state]}>{STATE_LABELS[state]}</span>
         </p>
         {report === null && (
-          <button
-            type="button"
-            onClick={() => generate.mutate({})}
-            disabled={generate.isPending}
-            className="btn-primary"
-          >
-            <Icon name="sparkles" className="h-4 w-4" />
-            {generate.isPending
-              ? 'Đang sinh…'
-              : target.type === 'teaching_plan'
-                ? 'AI gợi ý điều chỉnh kế hoạch'
-                : `Sinh báo cáo ${scopeLabel}`}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => generate.mutate({})}
+              disabled={generate.isPending || manualCreate.isPending}
+              className="btn-primary"
+            >
+              <Icon name="sparkles" className="h-4 w-4" />
+              {generate.isPending
+                ? 'Đang sinh…'
+                : target.type === 'teaching_plan'
+                  ? 'AI gợi ý điều chỉnh kế hoạch'
+                  : `Sinh báo cáo ${scopeLabel}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => manualCreate.mutate({})}
+              disabled={generate.isPending || manualCreate.isPending}
+              className="btn-secondary"
+            >
+              {manualCreate.isPending ? 'Đang mở…' : 'Tự viết'}
+            </button>
+          </div>
         )}
       </div>
       {generate.isError && <ErrorAlert error={generate.error} />}
+      {manualCreate.isError && <ErrorAlert error={manualCreate.error} />}
       {report !== null && (
         <div className="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <ReportEditor

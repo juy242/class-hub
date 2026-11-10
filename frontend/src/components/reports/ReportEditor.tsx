@@ -80,11 +80,18 @@ export function ReportEditor({ report, warnings, onWarnings }: ReportEditorProps
           className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200"
         >
           <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            AI chưa viết được bản đạt kiểm tra tự động ({describeChecks(report.check_notes)}) sau{' '}
-            {report.attempts} lần thử, nên bản này để trống cho thầy/cô tự viết. Bạn cũng có thể bấm
-            “Sinh lại” để thử lần nữa.
-          </span>
+          {report.attempts === 0 ? (
+            <span>
+              Bản trống để thầy/cô tự viết nhận xét. Nhập nội dung rồi bấm “Duyệt”. Nếu muốn, có thể
+              bấm “Sinh lại” để nhờ AI viết thử.
+            </span>
+          ) : (
+            <span>
+              AI chưa viết được bản đạt kiểm tra tự động ({describeChecks(report.check_notes)}) sau{' '}
+              {report.attempts} lần thử, nên bản này để trống cho thầy/cô tự viết. Bạn cũng có thể
+              bấm “Sinh lại” để thử lần nữa.
+            </span>
+          )}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">

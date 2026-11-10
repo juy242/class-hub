@@ -52,6 +52,8 @@ class ReportIn(ReportTarget):
 
     student_id: int | None = None  # có: sinh cho một em ngay; không: cả lớp, chạy nền
     feedback: str | None = Field(default=None, max_length=300)  # góp ý khi sinh lại
+    # Tạo bản nháp RỖNG để giáo viên tự viết, KHÔNG gọi LLM (dự phòng khi AI hết hạn mức, D-129).
+    manual: bool = False
 
     @model_validator(mode="after")
     def _check_student(self) -> Self:
@@ -59,6 +61,11 @@ class ReportIn(ReportTarget):
             raise ValueError("student_id chỉ dùng cho nhận xét học sinh.")
         if self.feedback and self.type in STUDENT_TYPES and self.student_id is None:
             raise ValueError("Góp ý chỉ dùng khi sinh cho một em hoặc một báo cáo.")
+        if self.manual:
+            if self.feedback:
+                raise ValueError("Tự viết thủ công thì không kèm góp ý cho AI.")
+            if self.type in STUDENT_TYPES and self.student_id is None:
+                raise ValueError("Tự viết nhận xét học sinh cần chọn một em (student_id).")
         return self
 
 

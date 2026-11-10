@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  createManualReport,
   fetchOversight,
   fetchReports,
   generateReport,
@@ -66,6 +67,15 @@ export function useGenerateReport(target: ReportTarget) {
 export function useStartClassJob(target: ReportTarget) {
   const refresh = useRefreshReports()
   return useMutation({ mutationFn: () => startClassJob(target), onSuccess: refresh })
+}
+
+// Tạo bản nháp rỗng để tự viết (không gọi AI). Dùng được cả khi AI chưa cấu hình hoặc hết hạn mức.
+export function useCreateManualReport(target: ReportTarget) {
+  const refresh = useRefreshReports()
+  return useMutation({
+    mutationFn: (options: { studentId?: number } = {}) => createManualReport(target, options),
+    onSuccess: refresh,
+  })
 }
 
 export function useUpdateReport() {

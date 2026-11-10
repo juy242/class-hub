@@ -1,6 +1,6 @@
 # Tiến độ
 
-Cập nhật lần cuối: 2026-10-13 (Giai đoạn 9). Tên và thứ tự giai đoạn lấy từ bộ prompt [PROMPTS.md](PROMPTS.md).
+Cập nhật lần cuối: 2026-11-10 (Giai đoạn 10). Tên và thứ tự giai đoạn lấy từ bộ prompt [PROMPTS.md](PROMPTS.md).
 
 ## Bảng 12 giai đoạn
 
@@ -19,7 +19,7 @@ Cập nhật lần cuối: 2026-10-13 (Giai đoạn 9). Tên và thứ tự giai
 | — | Giao diện v2 (thiết kế lại toàn bộ giao diện) | Xong, đã commit `479e486` (chưa thử ngoài Chrome; xem mục riêng) |
 | — | Chức năng Admin (tài khoản, năm học, lớp, phân công, nhập danh sách học sinh) | Xong, đã commit `2eb8947` và push (chưa thử với tệp thật của trường; xem mục cuối) |
 | — | Nhập giáo viên từ tệp (Admin tải Excel/CSV tạo nhiều tài khoản) | Xong (chưa commit; chạy thử thật trên API + DB; chưa thử trên trình duyệt; xem mục cuối) |
-| 10 | Đánh giá AI | Chưa làm |
+| 10 | Đánh giá AI | Xong (khung đầy đủ 6 bộ + `make eval` → `eval/REPORT.md`; số LLM là **mẫu nhỏ** do hạn mức Gemini free; dòng Nhận xét chờ giáo viên chấm; xem mục riêng) |
 | 11 | Bảo mật, triển khai, demo | Chưa làm |
 
 ## Giai đoạn 0: Khởi tạo dự án
@@ -791,3 +791,40 @@ Bạn hỏi làm sao biết HS khối 12 chọn môn thi gì; phát hiện dữ 
 | `pytest tests/exams` (16 qua: 4 vai trò, validate 2 môn/môn hợp lệ, khóa chặn sửa rồi mở lại được, khối 11 → 404) | Đã chạy, qua |
 | `pytest` toàn bộ backend | Đang chạy |
 | **Trình duyệt thật**: tick 2 môn tự chọn, chốt/mở khóa, BGH chỉ xem | **Chưa kiểm** |
+
+## Giai đoạn 10: Đánh giá AI
+
+Hoàn thiện `eval/` thành bộ đánh giá chạy bằng `make eval`, sinh `eval/REPORT.md` đúng 6 dòng của DESIGN mục 12.
+
+### Đã làm
+
+- **Bộ điều phối** `eval/run_all.py` (`make eval`): chạy lần lượt từng bộ con, trích chỉ số, ghi `eval/REPORT.md` (6 dòng, kèm ngày chạy, model LLM, phiên bản lời nhắc). `--skip-llm` bỏ các bộ cần LLM; `--sample` chạy mẫu nhỏ vừa hạn mức Gemini miễn phí. Thêm `make eval-security`.
+- **Dòng 1 — Tính điểm Thông tư 22** (`analytics_eval.py`): 30 ca qua chính `app/analytics/` so với giá trị tính tay. Không cần DB/LLM. **30/30 = 100%**.
+- **Dòng 4 — Mô hình cảnh báo** (`warning_eval.py`): đọc `backend/ml/REPORT.md`, so mốc Logistic Regression. **Recall 0,92 ≥ 0,75** (mốc LR 0,89).
+- **Dòng 3 — RAG** (`rag_eval.py` nâng cấp đa văn bản + `rag_questions.json` 30+5 câu theo **văn bản thật**: Thông tư 22/2021, Quy chế thi 24/2024, Điều lệ 32/2020): Hit@4 khớp cặp (văn bản, Điều). **Hit@4 29/30 = 97%, từ chối 5/5 = 100%**. "% trả lời đúng" đo qua các câu quy định của bộ Trợ lý.
+- **Dòng 2 — Trợ lý** (`assistant_eval.py` + `assistant_questions.json` **mở rộng 15→50 câu**, phủ 7 hàm, 4 vai trò, câu tra văn bản thật, câu từ chối). Đáp án tính bằng SQL, **đã scope theo năm học hiện hành** (sửa lỗi nhiều năm trùng tên lớp). Dry-run tính toàn bộ đáp án không lỗi.
+- **Dòng 6 — Phân quyền & bảo mật AI** (`security_eval.py` + `security_questions.json` **20 câu tấn công**: prompt injection, GVBM hỏi môn khác, cross-class, leo thang quyền, hỏi PII phụ huynh/ngày sinh). An toàn = không lộ dữ liệu cấm và câu ngoài quyền bị `authorize()` chặn.
+- **Dòng 5 — Nhận xét AI**: `comments_gen.py` sinh nhận xét qua đúng pipeline `reports.service.generate` (phân quyền, ẩn danh, LLM, bộ kiểm), ghi `eval/comments_review.csv` (cột điểm trống) rồi xoá bản nháp vừa tạo; `comments_eval.py` đọc lại điểm giáo viên chấm (TB và số câu tiêu cực). Cần 2–3 giáo viên chấm.
+- Tất cả 7 tệp `eval/*.py` **ruff sạch**.
+
+### Đã kiểm chứng và còn chờ kiểm chứng
+
+| Mục | Trạng thái |
+| --- | --- |
+| `analytics_eval.py` (không LLM) | **30/30 = 100%** |
+| `warning_eval.py` (không LLM) | **Recall 0,92 ĐẠT** |
+| `rag_eval.py` trên 3 văn bản thật (bge-m3 thật) | **Hit@4 97%, từ chối 100% ĐẠT** |
+| **Trợ lý và Bảo mật chạy LLM THẬT** (`gemini-flash-lite-latest`, **mẫu nhỏ** vừa hạn mức free) | `run_all --sample`: Trợ lý **đúng hàm 4/4, đúng số 4/4**; Bảo mật **an toàn 3/3**. Đều ĐẠT trên mẫu |
+| `comments_gen.py` sinh nhận xét thật (2 phiếu liên lạc, Gemini thật) | Đã chạy: nội dung bám số liệu, giọng khích lệ, không tên thật/từ tiêu cực; `comments_eval.py` đã test bằng CSV mẫu |
+| `eval/REPORT.md` sinh bằng `make eval` | Đã sinh: 5/6 dòng ĐẠT với số thật; dòng Nhận xét "chờ giáo viên chấm" |
+| **Bộ 50 câu Trợ lý và 20 câu Bảo mật chạy đầy đủ** | **Chưa** (gói Gemini free 20 lượt/ngày/mô hình không đủ cho hàng trăm lượt; cần khóa trả phí / Ollama / Claude, hoặc chia nhiều ngày–mô hình) |
+| **Giáo viên chấm 20 nhận xét** (dòng 5) | **Chưa** (cần 2–3 giáo viên THPT; công cụ đã sẵn) |
+| Quy tắc Thông tư 22 so với văn bản gốc | Nay đã nạp **TT22 bản gốc** vào RAG; nên đối chiếu lại công thức `analytics/` |
+
+### Cách kiểm tra
+
+1. `make up` (DB + backend), `make seed`, `make regulations` (nạp văn bản vào `data/regulations/`, cần TT22/TT24/TT32 bản có lớp chữ), `make rag-model`.
+2. `make eval EVAL_ARGS=--skip-llm`: chạy nhanh 3 dòng không cần LLM, ghi `eval/REPORT.md`.
+3. Điền `.env` (`LLM_PROVIDER=gemini`, `LLM_API_KEY`), rồi `make eval EVAL_ARGS=--sample` để chạy mẫu nhỏ các dòng LLM (vừa hạn mức free; đổi `LLM_MODEL` nếu một mô hình hết lượt ngày). Khóa trả phí thì `make eval` (đầy đủ 50+20 câu).
+4. Chạy riêng: `make eval-assistant`, `make eval-security`, `make eval-rag` (thử ngưỡng: `RAG_ARGS="--threshold 0.5"`); `ASSISTANT_ARGS=--dry-run` chỉ in đáp án.
+5. Nhận xét: `python eval/comments_gen.py --count 20` (cần khóa trả phí cho 20 câu) → nhờ giáo viên điền `eval/comments_review.csv` → `python eval/comments_eval.py`.

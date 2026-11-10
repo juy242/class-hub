@@ -1,65 +1,223 @@
 {
-  "version": 1,
-  "about": "Khung 10 câu để đánh giá RAG văn bản quy định (Giai đoạn 7, D-083): 8 câu trong phạm vi và 2 câu ngoài phạm vi, hỏi về VĂN BẢN MẪU GIẢ data/regulations/van-ban-mau-gia.txt. DESIGN mục 9 yêu cầu 30 câu về Thông tư 22, quy chế thi, nội quy cộng 5 câu ngoài phạm vi: nhóm bổ sung khi đã nạp văn bản thật. Mỗi câu trong phạm vi có 'articles' (điều chấp nhận được: Hit@4 tính đúng khi một trong 4 đoạn đầu thuộc các điều này) và 'clause' (khoản mong đợi, chỉ để in thêm, không tính vào Hit@4). Các câu này KHÔNG dùng để chọn ngưỡng rag_min_similarity (ngưỡng đo trên bộ câu khác, xem D-082).",
-  "document": "Quy chế mẫu của Trường THPT Mẫu (VĂN BẢN GIẢ)",
+  "version": 2,
+  "about": "Bộ đánh giá RAG của Giai đoạn 10 (DESIGN mục 12): 30 câu TRONG phạm vi về văn bản quy định THẬT (Thông tư 22/2021, Quy chế thi tốt nghiệp 2024, Điều lệ trường 2020) và 5 câu NGOÀI phạm vi. Vì mỗi văn bản đều có 'Điều 5', 'Điều 12'... nên mỗi câu trong phạm vi gắn 'document' (tên hiển thị đúng như trong DB) và 'articles' (các Điều chấp nhận được): Hit@4 đúng khi một trong 4 đoạn đầu thuộc ĐÚNG văn bản VÀ một trong các Điều đó. 'clause' chỉ in thêm, không tính Hit@4. Câu ngoài phạm vi phải bị trả 'không tìm thấy' (found=false). Chạy: make eval-rag (cần make regulations đã nạp 3 văn bản và make rag-model). Phiên bản 1 (văn bản mẫu giả) xem lịch sử git.",
   "in_scope": [
     {
-      "id": "R01",
-      "question": "Muốn xin cho con nghỉ học thì phụ huynh phải làm gì?",
-      "articles": ["Điều 3", "Điều 2"],
+      "id": "T22-01",
+      "question": "Học sinh nghỉ học quá bao nhiêu buổi trong năm thì không được lên lớp?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
+      "articles": ["Điều 12"],
       "clause": "Khoản 1"
     },
     {
-      "id": "R02",
-      "question": "Nghỉ tổng cộng bao nhiêu buổi thì nhà trường mời phụ huynh lên trao đổi?",
-      "articles": ["Điều 3"],
-      "clause": "Khoản 2"
-    },
-    {
-      "id": "R03",
-      "question": "Bài kiểm tra tuần làm trong thời gian bao lâu?",
-      "articles": ["Điều 4"],
+      "id": "T22-02",
+      "question": "Điều kiện để học sinh được lên lớp là gì?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
+      "articles": ["Điều 12"],
       "clause": "Khoản 1"
     },
     {
-      "id": "R04",
-      "question": "Học sinh vào lớp sau khi trống đã đánh thì có bị tính là nghỉ không?",
-      "articles": ["Điều 2"],
+      "id": "T22-03",
+      "question": "Kết quả học tập của học sinh trong từng học kì được xếp thành mấy mức?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
+      "articles": ["Điều 9"],
       "clause": "Khoản 2"
     },
     {
-      "id": "R05",
-      "question": "Điện thoại bị giáo viên thu giữ thì bàn giao cho ai?",
-      "articles": ["Điều 5"],
+      "id": "T22-04",
+      "question": "Kết quả rèn luyện của học sinh được đánh giá theo những mức nào?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
+      "articles": ["Điều 8"],
       "clause": "Khoản 2"
     },
     {
-      "id": "R06",
-      "question": "Vi phạm quy định về điện thoại mấy lần thì bị hạ xếp loại rèn luyện?",
+      "id": "T22-05",
+      "question": "Có những hình thức đánh giá học sinh nào?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
       "articles": ["Điều 5"],
-      "clause": "Khoản 3"
+      "clause": "Khoản 1"
     },
     {
-      "id": "R07",
-      "question": "Ai được tuyên dương trước toàn trường vào lễ tổng kết?",
+      "id": "T22-06",
+      "question": "Đánh giá định kì gồm những bài kiểm tra nào và vào thời điểm nào?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
       "articles": ["Điều 7"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T22-07",
+      "question": "Điểm trung bình môn học kì được tính dựa trên những điểm thành phần nào?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
+      "articles": ["Điều 9", "Điều 7"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T22-08",
+      "question": "Học sinh có môn học phải kiểm tra, đánh giá lại trong kì nghỉ hè khi nào?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
+      "articles": ["Điều 14", "Điều 12"],
       "clause": null
     },
     {
-      "id": "R08",
-      "question": "Khi ở trường học sinh phải đeo thẻ gì và mất thẻ thì sao?",
+      "id": "T22-09",
+      "question": "Học sinh được tặng những danh hiệu khen thưởng nào cuối năm học?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
+      "articles": ["Điều 15"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T22-10",
+      "question": "Học sinh khuyết tật được đánh giá kết quả học tập như thế nào?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
+      "articles": ["Điều 11"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T22-11",
+      "question": "Số lần đánh giá thường xuyên của một môn học trong học kì được quy định ra sao?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
       "articles": ["Điều 6"],
-      "clause": "Khoản 2"
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T22-12",
+      "question": "Giáo viên chủ nhiệm có trách nhiệm gì trong việc đánh giá học sinh?",
+      "document": "Thông tư 22/2021/TT-BGDĐT về đánh giá học sinh THCS, THPT",
+      "articles": ["Điều 20"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-01",
+      "question": "Thí sinh đăng ký dự thi tốt nghiệp THPT ở đâu?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 20"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-02",
+      "question": "Điểm xét tốt nghiệp THPT được tính như thế nào?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 44"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-03",
+      "question": "Đối tượng và điều kiện dự thi tốt nghiệp THPT gồm những ai?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 19"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-04",
+      "question": "Thí sinh có những trách nhiệm gì khi dự thi?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 21"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-05",
+      "question": "Thí sinh muốn phúc khảo bài thi thì làm thủ tục thế nào?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 37"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-06",
+      "question": "Những trường hợp nào được miễn thi tốt nghiệp THPT?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 39"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-07",
+      "question": "Thí sinh được đặc cách tốt nghiệp THPT trong trường hợp nào?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 40"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-08",
+      "question": "Điểm ưu tiên khi xét công nhận tốt nghiệp được cộng cho những đối tượng nào?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 42"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-09",
+      "question": "Điều kiện để thí sinh được công nhận tốt nghiệp THPT là gì?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 45"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T24-10",
+      "question": "Thí sinh vi phạm quy chế thi bị xử lý như thế nào?",
+      "document": "Quy chế thi tốt nghiệp THPT (Thông tư 24/2024/TT-BGDĐT)",
+      "articles": ["Điều 57"],
+      "clause": null
+    },
+    {
+      "id": "T32-01",
+      "question": "Học sinh trường trung học có những nhiệm vụ gì?",
+      "document": "Điều lệ trường THCS, THPT (Thông tư 32/2020/TT-BGDĐT)",
+      "articles": ["Điều 34"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T32-02",
+      "question": "Học sinh trường trung học có những quyền gì?",
+      "document": "Điều lệ trường THCS, THPT (Thông tư 32/2020/TT-BGDĐT)",
+      "articles": ["Điều 35"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T32-03",
+      "question": "Những hành vi nào học sinh không được làm?",
+      "document": "Điều lệ trường THCS, THPT (Thông tư 32/2020/TT-BGDĐT)",
+      "articles": ["Điều 37"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T32-04",
+      "question": "Học sinh được khen thưởng và kỷ luật như thế nào?",
+      "document": "Điều lệ trường THCS, THPT (Thông tư 32/2020/TT-BGDĐT)",
+      "articles": ["Điều 38"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T32-05",
+      "question": "Tuổi của học sinh trường trung học được quy định ra sao?",
+      "document": "Điều lệ trường THCS, THPT (Thông tư 32/2020/TT-BGDĐT)",
+      "articles": ["Điều 33"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T32-06",
+      "question": "Mỗi lớp học ở trường trung học có tối đa bao nhiêu học sinh?",
+      "document": "Điều lệ trường THCS, THPT (Thông tư 32/2020/TT-BGDĐT)",
+      "articles": ["Điều 16"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T32-07",
+      "question": "Quy định về hành vi ứng xử và trang phục của học sinh là gì?",
+      "document": "Điều lệ trường THCS, THPT (Thông tư 32/2020/TT-BGDĐT)",
+      "articles": ["Điều 36"],
+      "clause": "Khoản 1"
+    },
+    {
+      "id": "T32-08",
+      "question": "Ban đại diện cha mẹ học sinh của lớp được tổ chức như thế nào?",
+      "document": "Điều lệ trường THCS, THPT (Thông tư 32/2020/TT-BGDĐT)",
+      "articles": ["Điều 44"],
+      "clause": "Khoản 1"
     }
   ],
   "out_of_scope": [
-    {
-      "id": "N01",
-      "question": "Học sinh bị kỷ luật buộc thôi học trong những trường hợp nào?"
-    },
-    {
-      "id": "N02",
-      "question": "Căng tin của trường mở cửa lúc mấy giờ?"
-    }
+    { "id": "N01", "question": "Học phí một năm học của trường là bao nhiêu tiền?" },
+    { "id": "N02", "question": "Giá một suất ăn bán trú tại trường là bao nhiêu?" },
+    { "id": "N03", "question": "Lịch nghỉ Tết Nguyên đán năm nay gồm những ngày nào?" },
+    { "id": "N04", "question": "Trường có bao nhiêu phòng máy tính và mở cửa lúc mấy giờ?" },
+    { "id": "N05", "question": "Cây phượng trong sân trường được trồng từ năm nào?" }
   ]
 }

@@ -78,6 +78,7 @@ def absences_by_code(session: Session, class_name: str) -> dict[str, int]:
                    count(a.id) FILTER (WHERE a.status IN ('absent_excused', 'absent_unexcused'))
             FROM class_students cs
             JOIN classes c ON c.id = cs.class_id
+            JOIN school_years y ON y.id = c.school_year_id AND y.is_current
             JOIN students s ON s.id = cs.student_id
             LEFT JOIN attendance a ON a.class_student_id = cs.id
             WHERE c.name = :name
@@ -93,7 +94,7 @@ def class_size(session: Session, class_name: str) -> int:
     return session.scalar(
         text(
             "SELECT count(*) FROM class_students cs JOIN classes c ON c.id = cs.class_id "
-            "WHERE c.name = :name"
+            "JOIN school_years y ON y.id = c.school_year_id AND y.is_current WHERE c.name = :name"
         ),
         {"name": class_name},
     )
@@ -102,7 +103,12 @@ def class_size(session: Session, class_name: str) -> int:
 def class_names(session: Session, grade: int) -> list[str]:
     return list(
         session.scalars(
-            text("SELECT name FROM classes WHERE grade_level = :g ORDER BY name"), {"g": grade}
+            text(
+                "SELECT c.name FROM classes c "
+                "JOIN school_years y ON y.id = c.school_year_id AND y.is_current "
+                "WHERE c.grade_level = :g ORDER BY c.name"
+            ),
+            {"g": grade},
         )
     )
 
@@ -123,6 +129,7 @@ def semester_averages(
             FROM assessments a
             JOIN class_students cs ON cs.id = a.class_student_id
             JOIN classes c ON c.id = cs.class_id
+            JOIN school_years y ON y.id = c.school_year_id AND y.is_current
             JOIN subjects sub ON sub.id = a.subject_id
             JOIN students s ON s.id = cs.student_id
             WHERE c.name = :cls AND sub.name = :subj AND a.semester = :sem
@@ -148,7 +155,9 @@ def calc(session: Session, spec: dict[str, Any]) -> list[str]:
         grade_class = session.scalar(
             text(
                 "SELECT c.name FROM students s JOIN class_students cs ON cs.student_id = s.id "
-                "JOIN classes c ON c.id = cs.class_id WHERE s.student_code = :code"
+                "JOIN classes c ON c.id = cs.class_id "
+                "JOIN school_years y ON y.id = c.school_year_id AND y.is_current "
+                "WHERE s.student_code = :code"
             ),
             {"code": spec["student_code"]},
         )
@@ -180,7 +189,9 @@ def calc(session: Session, spec: dict[str, Any]) -> list[str]:
         class_name = session.scalar(
             text(
                 "SELECT c.name FROM students s JOIN class_students cs ON cs.student_id = s.id "
-                "JOIN classes c ON c.id = cs.class_id WHERE s.student_code = :code"
+                "JOIN classes c ON c.id = cs.class_id "
+                "JOIN school_years y ON y.id = c.school_year_id AND y.is_current "
+                "WHERE s.student_code = :code"
             ),
             {"code": spec["student_code"]},
         )
@@ -206,7 +217,9 @@ def forbidden_strings(session: Session, refusal: dict[str, Any]) -> list[str]:
         found += session.scalars(
             text(
                 "SELECT s.full_name FROM students s JOIN class_students cs ON cs.student_id = s.id "
-                "JOIN classes c ON c.id = cs.class_id WHERE c.grade_level = :g"
+                "JOIN classes c ON c.id = cs.class_id "
+                "JOIN school_years y ON y.id = c.school_year_id AND y.is_current "
+                "WHERE c.grade_level = :g"
             ),
             {"g": refusal["forbidden_names_of_grade"]},
         )
@@ -216,6 +229,7 @@ def forbidden_strings(session: Session, refusal: dict[str, Any]) -> list[str]:
                 "SELECT s.guardian_name, s.guardian_phone FROM students s "
                 "JOIN class_students cs ON cs.student_id = s.id "
                 "JOIN classes c ON c.id = cs.class_id "
+                "JOIN school_years y ON y.id = c.school_year_id AND y.is_current "
                 "WHERE c.name = :n"
             ),
             {"n": refusal["forbidden_guardian_of_class"]},
@@ -238,7 +252,12 @@ def screen_ids(session: Session, item: dict[str, Any]) -> tuple[int | None, int 
     class_id = subject_id = None
     if item.get("class"):
         class_id = session.scalar(
-            text("SELECT id FROM classes WHERE name = :n"), {"n": item["class"]}
+            text(
+                "SELECT c.id FROM classes c "
+                "JOIN school_years y ON y.id = c.school_year_id AND y.is_current "
+                "WHERE c.name = :n"
+            ),
+            {"n": item["class"]},
         )
         if class_id is None:
             raise SystemExit(f"Không có lớp {item['class']}. Chạy make seed.")

@@ -52,7 +52,7 @@ def _best_hit_text(result: SearchResult) -> str:
     if not result.hits:
         return "không có đoạn nào qua ngưỡng"
     top = result.hits[0]
-    return f"{top.article} {top.clause or '(cả điều)'}"
+    return f"{top.document_name[:24]}… {top.article} {top.clause or '(cả điều)'}"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -69,15 +69,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         with get_session_factory()() as session:
-            document = session.scalar(
-                select(RegulationDocument).where(
-                    RegulationDocument.name == data["document"],
-                    RegulationDocument.status == RegulationStatus.ACTIVE,
+            needed = sorted({item["document"] for item in in_scope})
+            active = set(
+                session.scalars(
+                    select(RegulationDocument.name).where(
+                        RegulationDocument.status == RegulationStatus.ACTIVE
+                    )
                 )
             )
-            if document is None:
+            missing = [name for name in needed if name not in active]
+            if missing:
                 print(
-                    f'Chưa nạp văn bản còn hiệu lực "{data["document"]}". Chạy make regulations.',
+                    "Chưa nạp (còn hiệu lực) các văn bản sau. Chạy make regulations:\n  "
+                    + "\n  ".join(missing),
                     file=sys.stderr,
                 )
                 return 2
@@ -88,19 +92,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                     .values(value=args.threshold)
                 )
 
-            print(f"Văn bản: {data['document']}")
+            print("Văn bản dùng trong bộ câu:\n  " + "\n  ".join(needed))
             hits_ok = clause_ok = clause_total = 0
             print("\n== Câu TRONG phạm vi ==")
             for item in in_scope:
                 result = search_regulation(session, item["question"], K)
-                found_articles = [hit.article for hit in result.hits]
-                hit = any(article in found_articles for article in item["articles"])
+                hit = any(
+                    h.document_name == item["document"] and h.article in item["articles"]
+                    for h in result.hits
+                )
                 hits_ok += hit
                 clause_note = ""
                 if item.get("clause"):
                     clause_total += 1
                     right_clause = any(
-                        h.article in item["articles"] and h.clause == item["clause"]
+                        h.document_name == item["document"]
+                        and h.article in item["articles"]
+                        and h.clause == item["clause"]
                         for h in result.hits
                     )
                     clause_ok += right_clause

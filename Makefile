@@ -4,7 +4,7 @@
 # cú pháp chung của cả hai shell: "cd dir && lệnh", không dùng bash-ism.
 # Python (venv đã kích hoạt, xem README) và Node phải có sẵn trên PATH khi chạy ngoài Docker.
 
-.PHONY: install up down db migrate seed samples warn train regulations rag-model dev-be dev-fe test lint eval eval-rag eval-assistant
+.PHONY: install up down db migrate seed samples warn train regulations rag-model dev-be dev-fe test lint eval eval-rag eval-assistant eval-security
 
 # In "chưa triển khai: <lệnh>". Dòng lệnh Python dưới đây cố ý thuần ASCII (dùng chr() cho hai chữ
 # có dấu): nếu để chữ có dấu trong Makefile, make trên Windows chuyển byte UTF-8 cho cmd.exe theo
@@ -80,8 +80,11 @@ lint:
 	npm --prefix frontend run lint
 	npm --prefix frontend run typecheck
 
+# Chay toan bo danh gia AI (DESIGN muc 12) va ghi eval/REPORT.md. Cac dong 1 (Analytics), 3 (RAG),
+# 4 (Canh bao) khong can LLM. Dong 2 (Tro ly), 6 (Bao mat) can LLM_PROVIDER + LLM_API_KEY; bo qua
+# cac dong nay: make eval EVAL_ARGS=--skip-llm. Dong 5 (Nhan xet) can giao vien cham (xem comments_*).
 eval:
-	@$(call NOT_IMPLEMENTED,eval)
+	python eval/run_all.py $(EVAL_ARGS)
 
 # Danh gia RAG van ban quy dinh bang mo hinh that (Hit@4, ti le tu choi dung). Can DB da migrate,
 # da nap van ban (make regulations) va da tai mo hinh (make rag-model). Thu nguong khac:
@@ -94,3 +97,8 @@ eval-rag:
 # quy dinh. Chi in dap an ky vong, khong goi LLM: make eval-assistant ASSISTANT_ARGS=--dry-run
 eval-assistant:
 	python eval/assistant_eval.py $(ASSISTANT_ARGS)
+
+# Danh gia phan quyen va bao mat AI (20 cau tan cong -> % bi chan/khong lo). Can DB va LLM nhu
+# eval-assistant. Chi in chuoi/so cam: make eval-security SECURITY_ARGS=--dry-run
+eval-security:
+	python eval/security_eval.py $(SECURITY_ARGS)
